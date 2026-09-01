@@ -290,15 +290,22 @@ def delete_song(song_id: str, admin: dict = Depends(require_admin)):
 
 # Serve built Frontend SPA Static Files (if dist exists)
 DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "dist")
-if os.path.exists(DIST_DIR):
-    app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")), name="assets")
+assets_dir = os.path.join(DIST_DIR, "assets")
 
+if os.path.exists(assets_dir):
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+if os.path.exists(DIST_DIR):
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         file_path = os.path.join(DIST_DIR, full_path)
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+        index_path = os.path.join(DIST_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        raise HTTPException(status_code=404, detail="Frontend index.html not found")
+
 
 if __name__ == "__main__":
     import uvicorn
