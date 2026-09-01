@@ -6,10 +6,12 @@ Wavelength is a high-performance, modern music streaming web application built w
 - 🎵 **Music Player**: Gapless loop playback, volume controls, queue management, lyrics display, audio visualizer, quality selector.
 - 👑 **Admin Portal**: Manual audio & thumbnail file upload (MP3/WAV/PNG/JPG) or direct stream URL upload.
 - 🔐 **Authentication**: User registration, User login, Admin privileges (`admin` / `admin123`).
-- 💾 **Persistent SQLite Database**: Zero data loss on server restart.
-- ☁️ **Render 24/7 Deployment**: Ready to deploy with persistent disk volume mount support (`render.yaml`).
+- 💾 **Auto-Seeding Database**: Automatically seeds default song catalog & admin user on launch.
+- ☁️ **100% Free Render Deployment**: Configured via `render.yaml` for Render Free Instance ($0/mo).
 
-## Deployment on Render
-1. Push code to GitHub repository (`https://github.com/wwwvasanth507-create/wavelength.git`).
-2. Create a new **Web Service** on [Render.com](https://render.com) using `render.yaml`.
-3. Add a **Disk Mount** to `/var/data` on Render for 24/7 database & media persistence.
+## 100% Free Deployment on Render (No Paid Disk Needed)
+1. Push your code to your GitHub repository.
+2. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Blueprint**.
+3. Connect your GitHub repository. Render will automatically detect `render.yaml` and set up the Free Web Service.
+4. Click **Apply**! Your app will be live on a free `https://...onrender.com` URL in 2-3 minutes.
+

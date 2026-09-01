@@ -2,16 +2,10 @@ services:
   - type: web
     name: wavelength-music-player
     env: python
-    buildCommand: "./build.sh"
+    plan: free
+    buildCommand: "bash build.sh"
     startCommand: "python server/main.py"
     envVars:
-      - key: DATABASE_PATH
-        value: /var/data/wavelength.db
-      - key: UPLOADS_PATH
-        value: /var/data/uploads
       - key: JWT_SECRET
         generateValue: true
-    disk:
-      name: wavelength-data
-      mountPath: /var/data
-      sizeGB: 1
+
