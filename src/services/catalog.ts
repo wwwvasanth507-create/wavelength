@@ -16,7 +16,7 @@ export interface CatalogState {
   error: string | null;
 }
 
-const CACHE_KEY = "wavelength-catalog-cache-v6";
+const CACHE_KEY = "wavelength-catalog-cache-v7";
 
 function buildFallbackCatalog(): Omit<CatalogState, "loading" | "error" | "getSongById" | "searchSongs" | "songMap" | "refreshCatalog"> {
   const songs = fallbackSongs.map((song) => ({ ...song }));
@@ -98,16 +98,13 @@ export function useCatalog(): CatalogState {
         const cached = window.localStorage.getItem(CACHE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed.songs) && parsed.songs.length > 0) {
-            const songMap = new Map<string, Song>();
-            fallbackSongs.forEach(s => songMap.set(s.id, s));
-            parsed.songs.forEach((s: Song) => songMap.set(s.id, s));
-            const mergedSongs = Array.from(songMap.values());
+          if (Array.isArray(parsed.songs)) {
+            const songs = parsed.songs;
             return {
-              songs: mergedSongs,
+              songs,
               playlists: Array.isArray(parsed.playlists) ? parsed.playlists : fallbackPlaylists,
-              artists: buildArtists(mergedSongs),
-              albums: buildAlbums(mergedSongs),
+              artists: buildArtists(songs),
+              albums: buildAlbums(songs),
               source: "remote",
               loading: false,
               error: null,
@@ -132,29 +129,25 @@ export function useCatalog(): CatalogState {
       if (res.ok) {
         const data = await res.json();
         const rawSongs = Array.isArray(data.songs) ? data.songs : [];
-        if (rawSongs.length > 0) {
-          const songs = rawSongs.map((s: any, idx: number) =>
-            normalizeSong(s, fallbackSongs[idx % fallbackSongs.length])
+        const songs = rawSongs.map((s: any) => normalizeSong(s));
+        const playlists = fallbackPlaylists;
+        const nextState = {
+          songs,
+          playlists,
+          artists: buildArtists(songs),
+          albums: buildAlbums(songs),
+          source: "remote" as const,
+          loading: false,
+          error: null,
+        };
+        setState(nextState);
+        try {
+          window.localStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ songs: nextState.songs, playlists: nextState.playlists })
           );
-          const playlists = fallbackPlaylists;
-          const nextState = {
-            songs,
-            playlists,
-            artists: buildArtists(songs),
-            albums: buildAlbums(songs),
-            source: "remote" as const,
-            loading: false,
-            error: null,
-          };
-          setState(nextState);
-          try {
-            window.localStorage.setItem(
-              CACHE_KEY,
-              JSON.stringify({ songs: nextState.songs, playlists: nextState.playlists })
-            );
-          } catch {}
-          return;
-        }
+        } catch {}
+        return;
       }
     } catch {
       // Fallthrough to fallback if server API unavailable
@@ -166,6 +159,7 @@ export function useCatalog(): CatalogState {
       error: null,
     });
   }, []);
+
 
   useEffect(() => {
     loadCatalog();
