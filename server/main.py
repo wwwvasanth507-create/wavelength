@@ -311,7 +311,8 @@ if __name__ == "__main__":
     import uvicorn
     # Target execution environment: Ubuntu 24.04 LTS at /opt/wave
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", 5000))
+    port = int(os.getenv("PORT", 6000))
     reload_flag = os.getenv("RELOAD", "false").lower() == "true"
     uvicorn.run("server.main:app", host=host, port=port, reload=reload_flag)
+
 

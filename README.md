@@ -65,7 +65,7 @@ source venv/bin/activate  # On Linux/macOS
 pip install -r requirements.txt
 python server/main.py
 ```
-Open **`http://localhost:5000`** in your web browser.
+Open **`http://localhost:6000`** in your web browser.
 
 ---
 
