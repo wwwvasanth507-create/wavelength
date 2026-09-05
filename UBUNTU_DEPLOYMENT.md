@@ -18,6 +18,33 @@ This guide provides complete instructions to deploy and host **Wavelength Music 
 | **Process Manager** | Systemd Service Daemon | `/etc/systemd/system/wavelength.service` |
 | **Reverse Proxy** | Nginx HTTP Server (Port 80/443 -> Port 6000) | `/etc/nginx/sites-available/wavelength` |
 
+## 💻 Running on Localhost in Ubuntu
+
+### Method A: Automated Systemd Service (Port 80 / Port 6000)
+After running `sudo bash deploy-ubuntu.sh`, open your web browser on Ubuntu and visit:
+- **`http://localhost`** (via Nginx Port 80)
+- **`http://localhost:6000`** (direct FastAPI Backend)
+
+### Method B: Manual Terminal Execution (Localhost:6000)
+If you want to run it interactively in your terminal on Ubuntu:
+
+```bash
+cd /opt/wave
+
+# 1. Activate Python virtual environment & install requirements
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Install Node modules & build frontend
+npm install
+npm run build
+
+# 3. Start Python backend server
+python3 server/main.py
+```
+Open **`http://localhost:6000`** in your browser.
+
 ---
 
 ## ⚡ Option 1: Automated 1-Command Deployment
