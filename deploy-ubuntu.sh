@@ -10,7 +10,7 @@ set -e # Exit immediately if a command exits with a non-zero status
 APP_DIR="/opt/wave"
 REPO_URL="https://github.com/wwwvasanth507-create/wavelength.git"
 SERVICE_NAME="wavelength"
-PORT=6000
+PORT=5000
 
 echo "======================================================================"
 echo "  🚀 Starting Wavelength Deployment on Ubuntu 24.04 LTS"
@@ -95,10 +95,10 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/wave
-ExecStart=/opt/wave/venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 6000 --workers 2
+ExecStart=/opt/wave/venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 5000 --workers 2
 Restart=always
 RestartSec=3
-Environment=PORT=6000
+Environment=PORT=5000
 Environment=JWT_SECRET=wavelength_ubuntu_24_04_secure_key_change_me
 Environment=DATABASE_PATH=/opt/wave/wavelength.db
 Environment=UPLOADS_PATH=/opt/wave/uploads
@@ -120,9 +120,9 @@ server {
 
     client_max_body_size 100M;
 
-    # Backend API & Uploads reverse proxy to Uvicorn port 6000
+    # Backend API & Uploads reverse proxy to Uvicorn port 5000
     location / {
-        proxy_pass http://127.0.0.1:6000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

@@ -16,34 +16,7 @@ This guide provides complete instructions to deploy and host **Wavelength Music 
 | **Database** | SQLite Auto-Seeded DB | `/opt/wave/wavelength.db` |
 | **Uploads Storage** | Audio & Cover Art Media Files | `/opt/wave/uploads/` |
 | **Process Manager** | Systemd Service Daemon | `/etc/systemd/system/wavelength.service` |
-| **Reverse Proxy** | Nginx HTTP Server (Port 80/443 -> Port 6000) | `/etc/nginx/sites-available/wavelength` |
-
-## 💻 Running on Localhost in Ubuntu
-
-### Method A: Automated Systemd Service (Port 80 / Port 6000)
-After running `sudo bash deploy-ubuntu.sh`, open your web browser on Ubuntu and visit:
-- **`http://localhost`** (via Nginx Port 80)
-- **`http://localhost:6000`** (direct FastAPI Backend)
-
-### Method B: Manual Terminal Execution (Localhost:6000)
-If you want to run it interactively in your terminal on Ubuntu:
-
-```bash
-cd /opt/wave
-
-# 1. Activate Python virtual environment & install requirements
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Install Node modules & build frontend
-npm install
-npm run build
-
-# 3. Start Python backend server
-python3 server/main.py
-```
-Open **`http://localhost:6000`** in your browser.
+| **Reverse Proxy** | Nginx HTTP Server (Port 80/443 -> Port 5000) | `/etc/nginx/sites-available/wavelength` |
 
 ---
 
@@ -61,7 +34,7 @@ sudo bash deploy-ubuntu.sh
 3. Creates a Python virtual environment at `/opt/wave/venv`.
 4. Installs Python packages from `requirements.txt`.
 5. Compiles React 19 frontend assets into `/opt/wave/dist`.
-6. Registers and enables systemd service `wavelength.service` on port 6000.
+6. Registers and enables systemd service `wavelength.service` on port 5000.
 7. Configures and enables Nginx reverse proxy on port 80.
 8. Configures permissions (`chown -R www-data:www-data /opt/wave`).
 
@@ -123,10 +96,10 @@ After=network.target network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/wave
-ExecStart=/opt/wave/venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 6000 --workers 2
+ExecStart=/opt/wave/venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 5000 --workers 2
 Restart=always
 RestartSec=5s
-Environment="PORT=6000"
+Environment="PORT=5000"
 Environment="JWT_SECRET=wavelength_ubuntu_24_04_secure_key"
 Environment="DATABASE_PATH=/opt/wave/wavelength.db"
 Environment="UPLOADS_PATH=/opt/wave/uploads"
@@ -164,7 +137,7 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:6000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
