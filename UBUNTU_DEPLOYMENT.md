@@ -60,8 +60,8 @@ sudo mkdir -p /opt/wave
 sudo chown -R $USER:$USER /opt/wave
 cd /opt/wave
 
-# Copy or clone your repository into /opt/wave
-git clone <your-repo-url> .
+# Clone your repository into /opt/wave
+git clone https://github.com/wwwvasanth507-create/wavelength.git .
 ```
 
 ### 3. Setup Python Virtual Environment (PEP 668 Compliance)

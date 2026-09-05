@@ -19,9 +19,11 @@ Wavelength is a high-performance, modern music streaming web application built w
 Wavelength is fully configured to run natively on **Ubuntu 24.04 LTS (Noble Numbat)** in the directory **`/opt/wave`**.
 
 ### ⚡ 1-Command Automated Setup on Ubuntu Server
-Run the automated deployment script on your Ubuntu 24.04 server as `root` or using `sudo`:
+Clone the repository and run the automated deployment script as `root` or using `sudo`:
 
 ```bash
+git clone https://github.com/wwwvasanth507-create/wavelength.git /opt/wave
+cd /opt/wave
 sudo bash deploy-ubuntu.sh
 ```
 

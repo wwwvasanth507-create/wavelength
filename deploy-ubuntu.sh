@@ -8,12 +8,14 @@
 set -e # Exit immediately if a command exits with a non-zero status
 
 APP_DIR="/opt/wave"
+REPO_URL="https://github.com/wwwvasanth507-create/wavelength.git"
 SERVICE_NAME="wavelength"
 PORT=6000
 
 echo "======================================================================"
 echo "  🚀 Starting Wavelength Deployment on Ubuntu 24.04 LTS"
 echo "  Target Path: ${APP_DIR}"
+echo "  Repository: ${REPO_URL}"
 echo "======================================================================"
 
 # 1. Check Root Privileges
@@ -55,12 +57,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ "${SCRIPT_DIR}" != "${APP_DIR}" ]; then
   echo "📋 Copying source code from ${SCRIPT_DIR} to ${APP_DIR}..."
   rsync -av --exclude='node_modules' --exclude='venv' --exclude='dist' --exclude='.git' "${SCRIPT_DIR}/" "${APP_DIR}/"
+fi
+
 cd "${APP_DIR}"
 
-if [ -d ".git" ]; then
-  echo "🔄 Pulling latest code changes via git pull..."
-  git pull origin main || git pull || echo "⚠️ Warning: git pull failed or no remote set, proceeding with existing files."
+if [ ! -d ".git" ]; then
+  echo "📥 Initializing git repository from ${REPO_URL}..."
+  git clone "${REPO_URL}" . || echo "⚠️ Warning: git clone failed, continuing with copied files."
+else
+  echo "🔄 Pulling latest code changes from ${REPO_URL}..."
+  git pull origin main || git pull || echo "⚠️ Warning: git pull failed, proceeding with existing files."
 fi
+
 
 echo "🐍 [3/6] Configuring Python 3 Virtual Environment at ${APP_DIR}/venv..."
 if [ ! -d "${APP_DIR}/venv" ]; then
