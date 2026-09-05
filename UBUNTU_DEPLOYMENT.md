@@ -174,12 +174,23 @@ sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d yourdomain.com
 ```
 
+## 🔄 Updating Application Code on Ubuntu (`/opt/wave`)
+
+To update your live deployment with the latest code from GitHub:
+
+```bash
+cd /opt/wave
+git pull origin main
+sudo bash deploy-ubuntu.sh
+```
+
 ---
 
 ## 📊 Management & Maintenance Commands
 
 | Action | Command |
 | :--- | :--- |
+| **Pull Latest Code** | `cd /opt/wave && git pull` |
 | **Check Service Status** | `sudo systemctl status wavelength` |
 | **Restart Application** | `sudo systemctl restart wavelength` |
 | **Stop Application** | `sudo systemctl stop wavelength` |

@@ -32,6 +32,12 @@ This single command will:
 4. Setup and enable `wavelength.service` under Systemd (`systemctl status wavelength`).
 5. Configure Nginx reverse proxy on port 80.
 
+### 🔄 Updating Server Code (`git pull`)
+To pull the latest code and re-deploy on Ubuntu 24.04:
+```bash
+cd /opt/wave && git pull && sudo bash deploy-ubuntu.sh
+```
+
 ### 📚 Full Ubuntu Documentation
 For detailed manual setup instructions, Nginx tuning, and SSL HTTPS setup with Let's Encrypt, see:
 👉 **[UBUNTU_DEPLOYMENT.md](file:///c:/un/UBUNTU_DEPLOYMENT.md)**

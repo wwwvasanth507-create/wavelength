@@ -55,11 +55,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ "${SCRIPT_DIR}" != "${APP_DIR}" ]; then
   echo "📋 Copying source code from ${SCRIPT_DIR} to ${APP_DIR}..."
   rsync -av --exclude='node_modules' --exclude='venv' --exclude='dist' --exclude='.git' "${SCRIPT_DIR}/" "${APP_DIR}/"
-fi
-
 cd "${APP_DIR}"
 
-# 4. Create Python Virtual Environment (Ubuntu 24.04 PEP 668 Compliance)
+if [ -d ".git" ]; then
+  echo "🔄 Pulling latest code changes via git pull..."
+  git pull origin main || git pull || echo "⚠️ Warning: git pull failed or no remote set, proceeding with existing files."
+fi
+
 echo "🐍 [3/6] Configuring Python 3 Virtual Environment at ${APP_DIR}/venv..."
 if [ ! -d "${APP_DIR}/venv" ]; then
   python3 -m venv "${APP_DIR}/venv"
