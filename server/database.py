@@ -3,9 +3,12 @@ import hashlib
 import json
 import uuid
 
+# Default database & upload directory configurations for Ubuntu 24.04 LTS (/opt/wave)
+# Override via DATABASE_PATH and UPLOADS_PATH environment variables if needed.
 DATABASE_URL = os.getenv("DATABASE_URL", "")
-DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "..", "wavelength.db"))
-UPLOADS_DIR = os.getenv("UPLOADS_PATH", os.path.join(os.path.dirname(__file__), "..", "uploads"))
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "wavelength.db"))) # Default: /opt/wave/wavelength.db
+UPLOADS_DIR = os.getenv("UPLOADS_PATH", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads")))       # Default: /opt/wave/uploads
+
 
 IS_POSTGRES = DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")
 
