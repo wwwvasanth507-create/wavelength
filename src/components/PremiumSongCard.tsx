@@ -29,12 +29,12 @@ export function PremiumSongCard({
       {/* Card */}
       <div className="relative overflow-hidden rounded-2xl shadow-premium-sm hover:shadow-premium-md transition-all duration-300 group-hover:scale-[1.02]">
         {/* Image */}
-        <div className={`${dim.img} relative overflow-hidden bg-gradient-to-br from-white/10 to-white/5`}>
+        <div className={`${dim.img} aspect-square relative overflow-hidden bg-gradient-to-br from-white/10 to-white/5`}>
           <img
             src={song.coverUrl}
             alt={song.title}
             loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            className="w-full h-full aspect-square object-cover object-center group-hover:scale-110 transition-transform duration-500"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).src =
                 "data:image/svg+xml;utf8," +

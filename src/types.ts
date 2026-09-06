@@ -43,6 +43,7 @@ export interface Album {
 }
 
 export type AudioQuality = "normal" | "high" | "lossless";
+export type SoundPreset = "spatial_3d" | "studio_master" | "bass_boost" | "vocal_pure";
 
 export interface Toast {
   id: string;

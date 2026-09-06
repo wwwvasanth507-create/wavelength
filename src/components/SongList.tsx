@@ -36,15 +36,18 @@ function SongCardComponent({
       className={`group relative text-left ${dim} shrink-0 glass-card-premium p-2.5 cursor-pointer select-none`}
     >
       {/* Artwork Container */}
-      <div className="relative overflow-hidden rounded-2xl aspect-square shadow-xl bg-black/60 border border-white/10">
+      <div className="relative overflow-hidden rounded-2xl aspect-square shadow-xl bg-white/5 border border-white/10">
         <img
           src={song.coverUrl}
           alt={song.title}
           loading="lazy"
-          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="h-full w-full aspect-square object-cover object-center group-hover:scale-105 transition-transform duration-500"
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).src =
-              "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80";
+              "data:image/svg+xml;utf8," +
+              encodeURIComponent(
+                `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='60' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+              );
           }}
         />
 
@@ -168,12 +171,21 @@ function SongRowComponent({
 
       {/* Cover & Title */}
       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        <img
-          src={song.coverUrl}
-          alt=""
-          className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-cover shrink-0 shadow-md border border-white/10"
-          loading="lazy"
-        />
+        <div className="h-10 w-10 sm:h-11 sm:w-11 aspect-square rounded-lg overflow-hidden shrink-0 shadow-md border border-white/10 bg-white/5">
+          <img
+            src={song.coverUrl}
+            alt=""
+            className="h-full w-full aspect-square object-cover object-center"
+            loading="lazy"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                "data:image/svg+xml;utf8," +
+                encodeURIComponent(
+                  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='60' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                );
+            }}
+          />
+        </div>
         <div className="min-w-0">
           <div className={`truncate text-xs sm:text-sm font-extrabold font-heading ${isCurrent ? "text-[#18E29A]" : "text-white group-hover:text-[#18E29A] transition-colors"}`}>
             {song.title}

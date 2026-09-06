@@ -203,7 +203,20 @@ export default function Search({ onNavigate, query, onQueryChange }: Props) {
                     onClick={() => onNavigate("playlist", pl.id)}
                     className="glass-card-premium p-3.5 rounded-3xl text-left transition-all"
                   >
-                    <img src={pl.coverUrl} alt="" className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-white/10" />
+                    <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-white/5">
+                      <img
+                        src={pl.coverUrl}
+                        alt=""
+                        className="w-full h-full aspect-square object-cover object-center"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            "data:image/svg+xml;utf8," +
+                            encodeURIComponent(
+                              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' font-weight='bold' text-anchor='middle'>♪</text></svg>`
+                            );
+                        }}
+                      />
+                    </div>
                     <div className="font-extrabold text-sm text-white truncate mt-3 font-heading">{pl.name}</div>
                     <div className="text-xs text-white/50 font-medium">{pl.songIds.length} tracks</div>
                   </button>
@@ -222,7 +235,20 @@ export default function Search({ onNavigate, query, onQueryChange }: Props) {
                     onClick={() => onNavigate("search")}
                     className="w-36 shrink-0 glass-card-premium p-3.5 rounded-3xl text-center"
                   >
-                    <img src={art.coverUrl} alt="" className="w-full aspect-square object-cover rounded-full shadow-lg border border-white/10" />
+                    <div className="w-full aspect-square rounded-full overflow-hidden shadow-lg border border-white/10 bg-white/5">
+                      <img
+                        src={art.coverUrl}
+                        alt=""
+                        className="w-full h-full aspect-square object-cover object-center"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            "data:image/svg+xml;utf8," +
+                            encodeURIComponent(
+                              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%236D5EF8'/><text x='50' y='65' font-size='40' fill='white' font-weight='bold' text-anchor='middle'>🎤</text></svg>`
+                            );
+                        }}
+                      />
+                    </div>
                     <div className="font-extrabold text-sm text-white truncate mt-3 font-heading">{art.name}</div>
                   </button>
                 ))}
@@ -240,7 +266,20 @@ export default function Search({ onNavigate, query, onQueryChange }: Props) {
                     onClick={() => onNavigate("search")}
                     className="w-36 shrink-0 glass-card-premium p-3.5 rounded-3xl text-left"
                   >
-                    <img src={al.coverUrl} alt="" className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-white/10" />
+                    <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-white/5">
+                      <img
+                        src={al.coverUrl}
+                        alt=""
+                        className="w-full h-full aspect-square object-cover object-center"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            "data:image/svg+xml;utf8," +
+                            encodeURIComponent(
+                              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' font-weight='bold' text-anchor='middle'>💿</text></svg>`
+                            );
+                        }}
+                      />
+                    </div>
                     <div className="font-extrabold text-sm text-white truncate mt-3 font-heading">{al.name}</div>
                     <div className="text-xs text-white/60 truncate font-medium">{al.artist}</div>
                   </button>

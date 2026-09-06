@@ -68,8 +68,19 @@ export default function Library({
               onClick={() => onNavigate("playlist", pl.id)}
               className="group relative glass-card-premium p-3.5 rounded-3xl cursor-pointer text-left transition-all"
             >
-              <div className="relative aspect-square overflow-hidden rounded-2xl bg-black/40 border border-white/10 shadow-lg">
-                <img src={pl.coverUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-white/5 border border-white/10 shadow-lg">
+                <img
+                  src={pl.coverUrl}
+                  alt=""
+                  className="w-full h-full aspect-square object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      "data:image/svg+xml;utf8," +
+                      encodeURIComponent(
+                        `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' font-weight='bold' text-anchor='middle'>♪</text></svg>`
+                      );
+                  }}
+                />
                 
                 {/* Pin button */}
                 <button
@@ -151,7 +162,20 @@ export default function Library({
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {artists.map((artist) => (
             <div key={artist.id} className="glass-card-premium p-4 rounded-3xl text-center">
-              <img src={artist.coverUrl} alt="" className="w-full aspect-square object-cover rounded-full shadow-lg border border-white/10" />
+              <div className="w-full aspect-square rounded-full overflow-hidden shadow-lg border border-white/10 bg-white/5">
+                <img
+                  src={artist.coverUrl}
+                  alt=""
+                  className="w-full h-full aspect-square object-cover object-center"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      "data:image/svg+xml;utf8," +
+                      encodeURIComponent(
+                        `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%236D5EF8'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>🎤</text></svg>`
+                      );
+                  }}
+                />
+              </div>
               <div className="font-extrabold text-sm text-white truncate mt-3 font-heading">{artist.name}</div>
               <div className="text-xs text-white/50 font-medium">Artist</div>
             </div>
@@ -164,7 +188,20 @@ export default function Library({
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {albums.map((album) => (
             <div key={album.id} className="glass-card-premium p-3.5 rounded-3xl text-left">
-              <img src={album.coverUrl} alt="" className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-white/10" />
+              <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-white/5">
+                <img
+                  src={album.coverUrl}
+                  alt=""
+                  className="w-full h-full aspect-square object-cover object-center"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      "data:image/svg+xml;utf8," +
+                      encodeURIComponent(
+                        `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' text-anchor='middle'>💿</text></svg>`
+                      );
+                  }}
+                />
+              </div>
               <div className="font-extrabold text-sm text-white truncate mt-3 font-heading">{album.name}</div>
               <div className="text-xs text-white/50 truncate font-medium">{album.artist}</div>
             </div>

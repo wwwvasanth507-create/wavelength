@@ -105,11 +105,20 @@ export default function Home({ onNavigate }: Props) {
       {featuredPlaylist && (
         <section className="relative overflow-hidden rounded-3xl p-5 md:p-8 border border-white/10 shadow-2xl glass-card-premium">
           <div className="flex flex-col md:flex-row items-center md:items-end gap-5">
-            <img
-              src={featuredPlaylist.coverUrl}
-              alt=""
-              className="h-36 w-36 sm:h-44 sm:w-44 md:h-52 md:w-52 rounded-2xl object-cover shadow-2xl border border-white/10 shrink-0"
-            />
+            <div className="h-36 w-36 sm:h-44 sm:w-44 md:h-52 md:w-52 aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-white/5">
+              <img
+                src={featuredPlaylist.coverUrl}
+                alt=""
+                className="h-full w-full aspect-square object-cover object-center"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    "data:image/svg+xml;utf8," +
+                    encodeURIComponent(
+                      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' font-weight='bold' text-anchor='middle'>♪</text></svg>`
+                    );
+                }}
+              />
+            </div>
             <div className="flex-1 space-y-2.5 text-center md:text-left min-w-0">
               <span className="px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-white/10 text-[#18E29A] border border-[#18E29A]/30">
                 Featured Mix
@@ -233,8 +242,20 @@ function ArtistCard({ artist, onNavigate }: { artist: Artist; onNavigate: (view:
       onClick={() => onNavigate("search")}
       className="group relative text-left w-32 sm:w-40 shrink-0 glass-card-premium p-3 rounded-2xl transition-all"
     >
-      <div className="relative overflow-hidden rounded-full aspect-square shadow-xl border border-white/10">
-        <img src={artist.coverUrl} alt={artist.name} loading="lazy" className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
+      <div className="relative overflow-hidden rounded-full aspect-square shadow-xl border border-white/10 bg-white/5">
+        <img
+          src={artist.coverUrl}
+          alt={artist.name}
+          loading="lazy"
+          className="h-full w-full aspect-square object-cover object-center group-hover:scale-110 transition-transform duration-500"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src =
+              "data:image/svg+xml;utf8," +
+              encodeURIComponent(
+                `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%236D5EF8'/><text x='50' y='65' font-size='40' fill='white' font-weight='bold' text-anchor='middle'>🎤</text></svg>`
+              );
+          }}
+        />
       </div>
       <div className="mt-2.5 text-center font-extrabold text-xs text-white truncate font-heading">{artist.name}</div>
       <div className="text-[10px] text-center text-white/50 uppercase tracking-widest font-bold mt-0.5">Artist</div>
@@ -248,8 +269,20 @@ function AlbumCard({ album, onNavigate }: { album: Album; onNavigate: (view: str
       onClick={() => onNavigate("search")}
       className="group relative text-left w-32 sm:w-40 shrink-0 glass-card-premium p-3 rounded-2xl transition-all"
     >
-      <div className="relative overflow-hidden rounded-xl aspect-square shadow-xl border border-white/10">
-        <img src={album.coverUrl} alt={album.name} loading="lazy" className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
+      <div className="relative overflow-hidden rounded-xl aspect-square shadow-xl border border-white/10 bg-white/5">
+        <img
+          src={album.coverUrl}
+          alt={album.name}
+          loading="lazy"
+          className="h-full w-full aspect-square object-cover object-center group-hover:scale-110 transition-transform duration-500"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src =
+              "data:image/svg+xml;utf8," +
+              encodeURIComponent(
+                `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='40' fill='black' font-weight='bold' text-anchor='middle'>💿</text></svg>`
+              );
+          }}
+        />
       </div>
       <div className="mt-2.5 font-extrabold text-xs text-white truncate font-heading">{album.name}</div>
       <div className="text-[11px] text-white/60 truncate font-medium">{album.artist}</div>

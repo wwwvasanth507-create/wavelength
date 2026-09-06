@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { SongRow } from "../components/SongList";
 import { usePlayer } from "../context/PlayerContext";
 import { useCatalog } from "../services/catalog";
+import { useAuth } from "../context/AuthContext";
 
 type SortField = "default" | "title" | "artist" | "album" | "duration";
 
-export default function PlaylistView({ playlistId }: { playlistId: string }) {
+export default function PlaylistView({ playlistId, onNavigate }: { playlistId: string; onNavigate?: (view: string, id?: string) => void }) {
   const { playlists, songs } = useCatalog();
   const { customPlaylists, playSong, shuffle, toggleShuffle, deletePlaylist, renamePlaylist, addToast } = usePlayer();
+  const { isAdmin } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -117,11 +119,20 @@ export default function PlaylistView({ playlistId }: { playlistId: string }) {
           background: `linear-gradient(180deg, ${playlist.color ?? "#6D5EF8"}44 0%, #09090B 100%)`,
         }}
       >
-        <img
-          src={playlist.coverUrl}
-          alt={playlist.name}
-          className="h-36 w-36 sm:h-44 sm:w-44 md:h-52 md:w-52 rounded-2xl object-cover shadow-2xl border border-white/10 shrink-0"
-        />
+        <div className="h-36 w-36 sm:h-44 sm:w-44 md:h-52 md:w-52 aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-white/5">
+          <img
+            src={playlist.coverUrl}
+            alt={playlist.name}
+            className="h-full w-full aspect-square object-cover object-center"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                "data:image/svg+xml;utf8," +
+                encodeURIComponent(
+                  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${playlist.color ?? "#1ED760"}'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                );
+            }}
+          />
+        </div>
 
         <div className="flex-1 space-y-2 min-w-0">
           <div className="flex items-center gap-2">
@@ -229,6 +240,15 @@ export default function PlaylistView({ playlistId }: { playlistId: string }) {
               <option value="album" className="bg-[#121214]">Sort: Album</option>
               <option value="duration" className="bg-[#121214]">Sort: Duration</option>
             </select>
+
+            {isAdmin && onNavigate && (
+              <button
+                onClick={() => onNavigate("admin")}
+                className="px-3 py-1.5 rounded-xl bg-[#6D5EF8]/20 border border-[#6D5EF8]/30 hover:bg-[#6D5EF8]/30 text-xs font-bold text-[#6D5EF8] shrink-0"
+              >
+                👑 Admin Manage
+              </button>
+            )}
 
             {playlist.id.startsWith("playlist-") && (
               <div className="flex items-center gap-1.5 shrink-0">

@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AudioQuality, Playlist, Song, Toast } from "../types";
+import type { AudioQuality, Playlist, Song, SoundPreset, Toast } from "../types";
+import { AudioEngine } from "../services/AudioEngine";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -31,6 +32,7 @@ interface PersistedPlayerState {
   recentlyPlayed: Song[];
   playbackSpeed: number;
   audioQuality: AudioQuality;
+  soundPreset: SoundPreset;
   customPlaylists: Playlist[];
   searchHistory: string[];
 }
@@ -51,6 +53,7 @@ interface PlayerState {
   repeat: "off" | "all" | "one";
   playbackSpeed: number;
   audioQuality: AudioQuality;
+  soundPreset: SoundPreset;
   sleepTimer: number | null;
   likedSongIds: string[];
   recentlyPlayed: Song[];
@@ -58,7 +61,7 @@ interface PlayerState {
   customPlaylists: Playlist[];
   searchHistory: string[];
   toasts: Toast[];
-  
+
   subscribeProgress: (cb: ProgressListener) => () => void;
   playSong: (song: Song, queue?: Song[]) => void;
   playQueueIndex: (index: number) => void;
@@ -77,6 +80,7 @@ interface PlayerState {
   toggleLike: (song: Song) => void;
   setPlaybackSpeed: (speed: number) => void;
   setAudioQuality: (q: AudioQuality) => void;
+  setSoundPreset: (preset: SoundPreset) => void;
   setSleepTimerMinutes: (minutes: number | null) => void;
 
   createPlaylist: (name: string, description?: string, isPrivate?: boolean, isCollaborative?: boolean) => Playlist;
@@ -98,7 +102,6 @@ const PlayerContext = createContext<PlayerState | null>(null);
 const LIKED_STORAGE_KEY = "wavelength-liked-songs-permanent";
 const SETTINGS_STORAGE_KEY = "wavelength-settings-v1";
 const SESSION_PLAYBACK_KEY = "wavelength-player-session";
-const SILENT_AUDIO_URI = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
 function readPersistedLikedSongs(): string[] {
   if (typeof window === "undefined") return [];
@@ -121,12 +124,13 @@ function readPersistedState(defaultSongs: Song[]): PersistedPlayerState {
     elapsed: 0,
     volume: 0.85,
     shuffle: false,
-    repeat: "all", // DEFAULT CONTINUOUS LOOP MODE
+    repeat: "all",
     isPlaying: false,
     likedSongIds,
     recentlyPlayed: [],
     playbackSpeed: 1,
     audioQuality: "high",
+    soundPreset: "spatial_3d",
     customPlaylists: [],
     searchHistory: ["A.R. Rahman", "Anirudh", "Modern Classical", "Lo-Fi Beats"],
   };
@@ -136,7 +140,7 @@ function readPersistedState(defaultSongs: Song[]): PersistedPlayerState {
   try {
     const rawSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
     const rawSession = window.localStorage.getItem(SESSION_PLAYBACK_KEY);
-    
+
     let parsedSettings: Partial<PersistedPlayerState> = {};
     let parsedSession: Partial<PersistedPlayerState> = {};
 
@@ -148,7 +152,7 @@ function readPersistedState(defaultSongs: Song[]): PersistedPlayerState {
     }
 
     const savedRecentlyPlayed = Array.isArray(parsedSession.recentlyPlayed || parsedSettings.recentlyPlayed)
-      ? (parsedSession.recentlyPlayed || parsedSettings.recentlyPlayed || []).slice(0, 3) // STRICTLY 3 PREVIOUS SONGS
+      ? (parsedSession.recentlyPlayed || parsedSettings.recentlyPlayed || []).slice(0, 3)
       : [];
 
     return {
@@ -158,12 +162,13 @@ function readPersistedState(defaultSongs: Song[]): PersistedPlayerState {
       elapsed: parsedSession.elapsed ?? 0,
       volume: parsedSettings.volume ?? 0.85,
       shuffle: parsedSettings.shuffle ?? false,
-      repeat: parsedSettings.repeat ?? "all", // CONTINUOUS PLAYBACK DEFAULT
-      isPlaying: false,
+      repeat: parsedSettings.repeat ?? "all",
+      isPlaying: false, // NEVER AUTO-PLAY ON PAGE REFRESH OR INITIAL LOAD
       likedSongIds,
       recentlyPlayed: savedRecentlyPlayed,
       playbackSpeed: parsedSettings.playbackSpeed ?? 1,
       audioQuality: parsedSettings.audioQuality ?? "high",
+      soundPreset: parsedSettings.soundPreset ?? "spatial_3d",
       customPlaylists: Array.isArray(parsedSettings.customPlaylists) ? parsedSettings.customPlaylists : [],
       searchHistory: Array.isArray(parsedSettings.searchHistory) ? parsedSettings.searchHistory : fallback.searchHistory,
     };
@@ -181,11 +186,10 @@ export function PlayerProvider({
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null);
-  const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
-  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
   const wakeLockRef = useRef<any>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscRef = useRef<OscillatorNode | null>(null);
+
+  // Flag to strictly prevent auto-playing audio on page refresh or mobile reopen
+  const isUserInitiatedRef = useRef<boolean>(false);
 
   const persistedState = useMemo(() => readPersistedState(songs), [songs]);
 
@@ -201,6 +205,7 @@ export function PlayerProvider({
   const [repeat, setRepeat] = useState<"off" | "all" | "one">(() => persistedState.repeat);
   const [playbackSpeed, setPlaybackSpeedState] = useState(() => persistedState.playbackSpeed);
   const [audioQuality, setAudioQualityState] = useState<AudioQuality>(() => persistedState.audioQuality);
+  const [soundPreset, setSoundPresetState] = useState<SoundPreset>(() => persistedState.soundPreset);
   const [likedSongIds, setLikedSongIds] = useState<string[]>(() => persistedState.likedSongIds);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>(() => persistedState.recentlyPlayed.slice(0, 3));
   const [customPlaylists, setCustomPlaylists] = useState<Playlist[]>(() => persistedState.customPlaylists);
@@ -211,7 +216,6 @@ export function PlayerProvider({
   const currentSong = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
   const upNext = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue.slice(currentIndex + 1, currentIndex + 50) : [];
 
-  // High-frequency time listeners (prevents React top-level context re-renders)
   const progressListenersRef = useRef<Set<ProgressListener>>(new Set());
   const crossfadeRef = useRef<{ isCrossfading: boolean; nextIndex: number } | null>(null);
 
@@ -240,7 +244,7 @@ export function PlayerProvider({
     progressListenersRef.current.forEach((fn) => fn({ elapsed: el, progress: prog, duration: dur }));
   };
 
-  // UNLIMITED BACKGROUND AUDIO & EXTREME POWER SAVER KEEP-ALIVE
+  // Lightweight Screen Wake Lock (only active during intentional user playback)
   const requestWakeLock = async () => {
     if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
       try {
@@ -258,72 +262,11 @@ export function PlayerProvider({
     }
   };
 
-  const keepAudioActive = () => {
-    try {
-      if (!audioCtxRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          audioCtxRef.current = new AudioCtx();
-        }
-      }
-      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-        audioCtxRef.current.resume();
-      }
-      if (audioCtxRef.current && !oscRef.current) {
-        const osc = audioCtxRef.current.createOscillator();
-        const gain = audioCtxRef.current.createGain();
-        osc.type = "sine";
-        osc.frequency.value = 20; // 20Hz sub-audible keep-alive pulse
-        gain.gain.value = 0.00001;
-        osc.connect(gain);
-        gain.connect(audioCtxRef.current.destination);
-        osc.start();
-        oscRef.current = osc;
-      }
-      if (silentAudioRef.current) {
-        silentAudioRef.current.play().catch(() => {});
-      }
-    } catch {}
-  };
-
   useEffect(() => {
     if (isPlaying) {
       requestWakeLock();
-      keepAudioActive();
     } else {
       releaseWakeLock();
-      if (silentAudioRef.current) silentAudioRef.current.pause();
-    }
-  }, [isPlaying]);
-
-  useEffect(() => {
-    const handleVisibilityOrLock = () => {
-      if (isPlayingRef.current) {
-        requestWakeLock();
-        keepAudioActive();
-        if (audioRef.current && audioRef.current.paused) {
-          audioRef.current.play().catch(() => {});
-        }
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityOrLock);
-    window.addEventListener("pagehide", handleVisibilityOrLock);
-    window.addEventListener("blur", handleVisibilityOrLock);
-    window.addEventListener("focus", handleVisibilityOrLock);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityOrLock);
-      window.removeEventListener("pagehide", handleVisibilityOrLock);
-      window.removeEventListener("blur", handleVisibilityOrLock);
-      window.removeEventListener("focus", handleVisibilityOrLock);
-    };
-  }, []);
-
-  // Web Lock API to prevent tab/process killing in screen-off & extreme power saver mode
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && "locks" in navigator && isPlaying) {
-      (navigator as any).locks.request("wavelength_unlimited_background_audio", { mode: "shared" }, () => {
-        return new Promise(() => {});
-      }).catch(() => {});
     }
   }, [isPlaying]);
 
@@ -354,7 +297,7 @@ export function PlayerProvider({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Audio Engine & Dual Audio Crossfade Listener
+  // Lightweight Audio Engine Initialization
   useEffect(() => {
     const attachListeners = (a: HTMLAudioElement) => {
       a.addEventListener("timeupdate", () => {
@@ -373,12 +316,12 @@ export function PlayerProvider({
           notifyProgress(secCur, secDur > 0 ? secCur / secDur : 0, secDur);
         }
 
-        // TRIGGER 3-SECOND CROSSFADE INTO NEXT SONG WITH VOLUME FADE & LIVE UI UPDATE
+        // Seamless 3-second crossfade trigger
         if (rem <= 3.0 && dur > 4.0 && !crossfadeRef.current && isPlayingRef.current) {
           const { queue: q, currentIndex: idx, repeat: r } = stateRef.current;
           let nextIdx = idx + 1;
           if (nextIdx >= q.length) {
-            nextIdx = (r === "all" || r === "off") ? 0 : -1; // Default continuous loop
+            nextIdx = (r === "all" || r === "off") ? 0 : -1;
           }
           if (r === "one") nextIdx = idx;
 
@@ -401,18 +344,14 @@ export function PlayerProvider({
             sec.playbackRate = playbackSpeedRef.current;
             sec.play().catch(() => {});
 
-            // LIVE UPDATE UI IMMEDIATELY TO NEXT SONG DETAILS IN LAST 3 SECONDS
             setCurrentIndex(nextIdx);
           }
         }
 
-        // FADE VOLUME DURING LAST 3 SECONDS
         if (crossfadeRef.current?.isCrossfading) {
-          const fadeProgress = Math.min(1, Math.max(0, (3.0 - rem) / 3.0)); // 0 at 3s remaining, 1 at 0s
+          const fadeProgress = Math.min(1, Math.max(0, (3.0 - rem) / 3.0));
           const maxVol = volumeRef.current;
-          // Reduce current playing song volume slightly down to 0
           a.volume = Math.max(0, maxVol * (1 - fadeProgress));
-          // Increase upcoming next song sound louder up to maximum volume
           if (secondaryAudioRef.current) {
             secondaryAudioRef.current.volume = Math.min(maxVol, maxVol * fadeProgress);
           }
@@ -438,12 +377,16 @@ export function PlayerProvider({
           if (a.src !== fallbackUrl) {
             a.src = fallbackUrl;
             a.load();
-            a.play().then(() => setIsPlaying(true)).catch(() => {});
+            if (isUserInitiatedRef.current) {
+              a.play().then(() => setIsPlaying(true)).catch(() => {});
+            }
           }
         }
       });
 
       a.addEventListener("play", () => {
+        AudioEngine.getInstance().attachAudioElement(a);
+        AudioEngine.getInstance().ensureContextActive();
         if (a === audioRef.current) setIsPlaying(true);
       });
 
@@ -454,26 +397,11 @@ export function PlayerProvider({
 
     if (!audioRef.current) {
       const a = new Audio();
-      a.preload = "auto";
+      a.preload = "metadata";
       (a as any).playsInline = true;
       a.volume = volumeRef.current;
       attachListeners(a);
       audioRef.current = a;
-    }
-
-    if (!secondaryAudioRef.current) {
-      const sec = new Audio();
-      sec.preload = "auto";
-      (sec as any).playsInline = true;
-      attachListeners(sec);
-      secondaryAudioRef.current = sec;
-    }
-
-    if (!silentAudioRef.current) {
-      const silent = new Audio(SILENT_AUDIO_URI);
-      silent.loop = true;
-      silent.volume = 0.01;
-      silentAudioRef.current = silent;
     }
   }, []);
 
@@ -483,7 +411,6 @@ export function PlayerProvider({
     if (sleepTimerSeconds <= 0) {
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.pause();
-        if (silentAudioRef.current) silentAudioRef.current.pause();
         addToast("Sleep timer finished. Music paused.", "info");
       }
       setSleepTimerSeconds(null);
@@ -508,76 +435,12 @@ export function PlayerProvider({
     if (secondaryAudioRef.current) secondaryAudioRef.current.playbackRate = playbackSpeed;
   }, [playbackSpeed]);
 
-  // Preload next 2 upcoming tracks & warm up initial 2-second audio chunks
-  const preloadAudio1Ref = useRef<HTMLAudioElement | null>(null);
-  const preloadAudio2Ref = useRef<HTMLAudioElement | null>(null);
-
-  const warmAudioCache = (url: string) => {
-    if (typeof fetch === "undefined" || !url) return;
-    try {
-      fetch(url, { headers: { Range: "bytes=0-65536" } }).catch(() => {});
-    } catch {}
-  };
-
-  const preloadNextTwoSongs = (q: Song[], idx: number, repeatMode: string) => {
-    if (!q.length || idx < 0) return;
-
-    const getTargetIndex = (offset: number) => {
-      let target = idx + offset;
-      if (target >= q.length) {
-        if (repeatMode === "all" || repeatMode === "off") {
-          target = target % q.length;
-        } else {
-          return null;
-        }
-      }
-      return target;
-    };
-
-    const idx1 = getTargetIndex(1);
-    const idx2 = getTargetIndex(2);
-
-    const song1 = idx1 !== null && idx1 >= 0 && idx1 < q.length ? q[idx1] : null;
-    const song2 = idx2 !== null && idx2 >= 0 && idx2 < q.length ? q[idx2] : null;
-
-    if (song1) {
-      warmAudioCache(song1.audioUrl);
-      if (!preloadAudio1Ref.current) {
-        const a = new Audio();
-        a.preload = "auto";
-        (a as any).playsInline = true;
-        preloadAudio1Ref.current = a;
-      }
-      if (preloadAudio1Ref.current.src !== song1.audioUrl) {
-        preloadAudio1Ref.current.src = song1.audioUrl;
-        preloadAudio1Ref.current.load();
-      }
-    }
-
-    if (song2) {
-      warmAudioCache(song2.audioUrl);
-      if (!preloadAudio2Ref.current) {
-        const a = new Audio();
-        a.preload = "auto";
-        (a as any).playsInline = true;
-        preloadAudio2Ref.current = a;
-      }
-      if (preloadAudio2Ref.current.src !== song2.audioUrl) {
-        preloadAudio2Ref.current.src = song2.audioUrl;
-        preloadAudio2Ref.current.load();
-      }
-    }
-  };
-
   // Playback execution when track changes
   useEffect(() => {
     const a = audioRef.current;
     if (!a || !currentSong) return;
 
-    // Check if crossfade is currently running for this track
     if (crossfadeRef.current?.isCrossfading) {
-      // Live UI update triggered during crossfade: let crossfade engine continue
-      preloadNextTwoSongs(queue, currentIndex, repeat);
       return;
     }
 
@@ -594,23 +457,26 @@ export function PlayerProvider({
     }
     a.playbackRate = playbackSpeed;
 
-    keepAudioActive();
-    a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-
-    // Preload next 2 upcoming tracks in queue
-    preloadNextTwoSongs(queue, currentIndex, repeat);
+    // STRICT CHECK: ONLY PLAY IF USER EXPLICITLY INITIATED PLAYBACK
+    // NEVER AUTO-PLAY ON DOMAIN REFRESH OR MOBILE REOPEN
+    if (isUserInitiatedRef.current) {
+      a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    } else {
+      a.pause();
+      setIsPlaying(false);
+    }
   }, [currentSong?.id, currentIndex, queue, repeat]);
 
-  // UPDATE RECENTLY PLAYED — STORE 3 PREVIOUS SONGS ONLY IN MEMORY
+  // UPDATE RECENTLY PLAYED (LIMIT: 3 PREVIOUS SONGS ONLY)
   useEffect(() => {
     if (!currentSong) return;
     setRecentlyPlayed((prev) => {
       const filtered = prev.filter((s) => s.id !== currentSong.id);
-      return [currentSong, ...filtered].slice(0, 3); // STRICT LIMIT: EXACTLY 3 PREVIOUS SONGS STATUS ONLY
+      return [currentSong, ...filtered].slice(0, 3);
     });
   }, [currentSong?.id]);
 
-  // PERMANENT LOCAL STORAGE SAVING FOR LIKED SONGS & SESSION STATE
+  // LOCAL STORAGE SAVING FOR LIKED SONGS & SESSION STATE
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -627,6 +493,7 @@ export function PlayerProvider({
         repeat,
         playbackSpeed,
         audioQuality,
+        soundPreset,
         customPlaylists,
         searchHistory,
       };
@@ -636,11 +503,11 @@ export function PlayerProvider({
         currentIndex,
         currentSongId: currentSong?.id ?? null,
         elapsed,
-        recentlyPlayed: recentlyPlayed.slice(0, 3), // 3 PREVIOUS SONGS ONLY
+        recentlyPlayed: recentlyPlayed.slice(0, 3),
       };
       window.localStorage.setItem(SESSION_PLAYBACK_KEY, JSON.stringify(payloadSession));
     } catch {}
-  }, [volume, shuffle, repeat, playbackSpeed, audioQuality, customPlaylists, searchHistory, currentIndex, currentSong?.id, elapsed, recentlyPlayed]);
+  }, [volume, shuffle, repeat, playbackSpeed, audioQuality, soundPreset, customPlaylists, searchHistory, currentIndex, currentSong?.id, elapsed, recentlyPlayed]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -689,7 +556,7 @@ export function PlayerProvider({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [volume, currentSong]);
 
-  // MEDIA SESSION API (LOCKSCREEN & CONTROL CENTER CONTINUOUS AUDIO)
+  // MEDIA SESSION API (LOCKSCREEN CONTROLS)
   useEffect(() => {
     if (!navigator.mediaSession || !currentSong) return;
 
@@ -730,7 +597,6 @@ export function PlayerProvider({
     navigator.mediaSession.setActionHandler("stop", () => {
       cancelCrossfade();
       if (audioRef.current) audioRef.current.pause();
-      if (silentAudioRef.current) silentAudioRef.current.pause();
       setIsPlaying(false);
     });
   }, [currentSong?.id, isPlaying, elapsed, duration, playbackSpeed]);
@@ -777,7 +643,7 @@ export function PlayerProvider({
     let nextIndex = idx + 1;
     if (nextIndex >= q.length) {
       if (stateRef.current.repeat === "all" || stateRef.current.repeat === "off") {
-        nextIndex = 0; // CONTINUOUS LOOP MODE
+        nextIndex = 0;
       } else {
         if (auto) setIsPlaying(false);
         return;
@@ -789,15 +655,18 @@ export function PlayerProvider({
     setElapsedState(0);
     setProgressState(0);
     notifyProgress(0, 0, audioRef.current?.duration || 0);
+
+    isUserInitiatedRef.current = true; // User/queue progression
     setCurrentIndex(nextIndex);
     setIsPlaying(true);
   };
 
   const playSong = (song: Song, newQueue?: Song[]) => {
+    isUserInitiatedRef.current = true; // User explicitly clicked a song to play!
     cancelCrossfade();
     const source = newQueue ?? (originalQueue.length ? originalQueue : songs);
     const normalized = source.filter(Boolean);
-    
+
     let playOrder = [...normalized];
     if (shuffle) {
       const rest = playOrder.filter((s) => s.id !== song.id);
@@ -806,7 +675,7 @@ export function PlayerProvider({
 
     const idx = playOrder.findIndex((s) => s.id === song.id);
     const finalIndex = idx >= 0 ? idx : 0;
-    
+
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
@@ -821,6 +690,7 @@ export function PlayerProvider({
   };
 
   const playQueueIndex = (index: number) => {
+    isUserInitiatedRef.current = true; // User explicitly picked queue item
     cancelCrossfade();
     if (index < 0 || index >= queue.length) return;
     if (audioRef.current) {
@@ -868,18 +738,17 @@ export function PlayerProvider({
   };
 
   const togglePlay = () => {
+    isUserInitiatedRef.current = true; // User explicitly toggled play/pause!
     const a = audioRef.current;
     if (!a || !currentSong) {
       if (queue.length > 0) setCurrentIndex(0);
       return;
     }
     if (a.paused) {
-      keepAudioActive();
       a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } else {
       cancelCrossfade();
       a.pause();
-      if (silentAudioRef.current) silentAudioRef.current.pause();
       setIsPlaying(false);
     }
   };
@@ -887,6 +756,7 @@ export function PlayerProvider({
   const next = () => goNext(false);
 
   const prev = () => {
+    isUserInitiatedRef.current = true;
     cancelCrossfade();
     const a = audioRef.current;
     if (a) {
@@ -988,6 +858,18 @@ export function PlayerProvider({
     addToast(`Audio Quality: ${q.toUpperCase()}`, "info");
   };
 
+  const setSoundPreset = (preset: SoundPreset) => {
+    setSoundPresetState(preset);
+    AudioEngine.getInstance().setSoundPreset(preset);
+    const labels: Record<SoundPreset, string> = {
+      spatial_3d: "Spatial 3D Atmos",
+      studio_master: "Studio Master",
+      bass_boost: "Bass Booster",
+      vocal_pure: "Vocal Clarity",
+    };
+    addToast(`Apple Sound: ${labels[preset]}`, "success");
+  };
+
   const setSleepTimerMinutes = (minutes: number | null) => {
     if (minutes === null) {
       setSleepTimerSeconds(null);
@@ -1083,6 +965,7 @@ export function PlayerProvider({
         repeat,
         playbackSpeed,
         audioQuality,
+        soundPreset,
         sleepTimer: sleepTimerSeconds,
         likedSongIds,
         recentlyPlayed,
@@ -1109,6 +992,7 @@ export function PlayerProvider({
         toggleLike,
         setPlaybackSpeed,
         setAudioQuality,
+        setSoundPreset,
         setSleepTimerMinutes,
 
         createPlaylist,

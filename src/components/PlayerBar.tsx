@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { usePlayer, usePlayerProgress, formatTime } from "../context/PlayerContext";
-import type { AudioQuality } from "../types";
+import type { AudioQuality, SoundPreset } from "../types";
 
 export default function PlayerBar({
   onOpenNowPlaying,
@@ -15,6 +15,7 @@ export default function PlayerBar({
   const song = p.currentSong;
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showSoundPresetMenu, setShowSoundPresetMenu] = useState(false);
   const [showSleepMenu, setShowSleepMenu] = useState(false);
 
   if (!song) {
@@ -33,11 +34,20 @@ export default function PlayerBar({
           onClick={onOpenNowPlaying}
           className="flex items-center gap-3 min-w-0 flex-1 text-left"
         >
-          <img
-            src={song.coverUrl}
-            alt={song.title}
-            className="h-10 w-10 rounded-xl object-cover border border-white/10 shrink-0 shadow-md"
-          />
+          <div className="h-10 w-10 aspect-square rounded-xl overflow-hidden border border-white/10 shrink-0 shadow-md bg-white/5">
+            <img
+              src={song.coverUrl}
+              alt={song.title}
+              className="h-full w-full aspect-square object-cover object-center"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src =
+                  "data:image/svg+xml;utf8," +
+                  encodeURIComponent(
+                    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='60' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                  );
+              }}
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-extrabold text-white font-heading">{song.title}</div>
             <div className="truncate text-[11px] text-white/60 font-medium">{song.artist}</div>
@@ -94,13 +104,20 @@ export default function PlayerBar({
         <div className="flex items-center gap-3.5 min-w-0">
           <button
             onClick={onOpenNowPlaying}
-            className="group relative h-13 w-13 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-xl"
+            className="group relative h-13 w-13 aspect-square rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-xl bg-white/5"
             aria-label="Expand player"
           >
             <img
               src={song.coverUrl}
               alt={song.title}
-              className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
+              className="h-full w-full aspect-square object-cover object-center group-hover:scale-110 transition-transform duration-500"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src =
+                  "data:image/svg+xml;utf8," +
+                  encodeURIComponent(
+                    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='60' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                  );
+              }}
             />
           </button>
 
@@ -254,11 +271,64 @@ export default function PlayerBar({
             )}
           </div>
 
+          {/* Apple Sound Presets Menu */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowSoundPresetMenu(!showSoundPresetMenu);
+                setShowQualityMenu(false);
+                setShowSpeedMenu(false);
+                setShowSleepMenu(false);
+              }}
+              className="px-2.5 py-1 rounded-xl text-[11px] font-black bg-gradient-to-r from-emerald-500/20 to-indigo-500/20 border border-[#18E29A]/30 text-[#18E29A] hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm"
+              title="Apple Sound Engine Preset"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </svg>
+              <span>
+                {p.soundPreset === "spatial_3d" ? "Spatial 3D" : p.soundPreset === "studio_master" ? "Studio" : p.soundPreset === "bass_boost" ? "Bass" : "Vocal"}
+              </span>
+            </button>
+
+            {showSoundPresetMenu && (
+              <div className="absolute bottom-10 right-0 bg-[#141418] border border-white/10 rounded-2xl p-1.5 shadow-2xl z-50 flex flex-col gap-1 w-44 backdrop-blur-2xl">
+                {[
+                  { id: "spatial_3d", label: "Spatial 3D Atmos", icon: "🎧" },
+                  { id: "studio_master", label: "Studio Lossless", icon: "💎" },
+                  { id: "bass_boost", label: "Bass Booster", icon: "🔊" },
+                  { id: "vocal_pure", label: "Vocal Clarity", icon: "🎙️" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      p.setSoundPreset(item.id as SoundPreset);
+                      setShowSoundPresetMenu(false);
+                    }}
+                    className={`text-xs py-2 px-2.5 rounded-xl text-left font-bold flex items-center justify-between transition-all ${
+                      p.soundPreset === item.id ? "bg-[#18E29A]/20 text-[#18E29A] border border-[#18E29A]/30" : "hover:bg-white/5 text-white/80"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </span>
+                    {p.soundPreset === item.id && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#18E29A] shadow-[0_0_8px_#18E29A]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="relative">
             <button
               onClick={() => {
                 setShowQualityMenu(!showQualityMenu);
                 setShowSpeedMenu(false);
+                setShowSoundPresetMenu(false);
                 setShowSleepMenu(false);
               }}
               className="px-2.5 py-1 rounded-xl text-[11px] font-black uppercase bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 transition-all"

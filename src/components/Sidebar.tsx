@@ -34,7 +34,14 @@ export default function Sidebar({
         <img
           src="/app_icon.png"
           alt="Wavelength"
-          className="h-11 w-11 rounded-2xl object-cover shadow-2xl border border-white/20 group-hover:scale-105 transition-transform duration-300"
+          className="h-11 w-11 aspect-square rounded-2xl object-cover object-center shadow-2xl border border-white/20 group-hover:scale-105 transition-transform duration-300 bg-white/5"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src =
+              "data:image/svg+xml;utf8," +
+              encodeURIComponent(
+                `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='50' fill='black' font-weight='bold' text-anchor='middle'>W</text></svg>`
+              );
+          }}
         />
         <div>
           <span className="font-extrabold text-xl tracking-tight text-white group-hover:text-[#18E29A] transition-colors font-heading block">

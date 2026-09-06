@@ -1,6 +1,7 @@
 import os
 import shutil
 import uuid
+import json
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -286,6 +287,223 @@ def delete_song(song_id: str, admin: dict = Depends(require_admin)):
     conn.close()
 
     return {"message": "Song deleted successfully"}
+
+
+# Playlists API Routes
+@app.get("/api/playlists")
+def list_playlists():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM playlists ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    playlists = []
+    for r in rows:
+        song_ids_raw = r["song_ids"]
+        song_ids = []
+        if song_ids_raw:
+            try:
+                song_ids = json.loads(song_ids_raw)
+            except Exception:
+                song_ids = [s.strip() for s in song_ids_raw.split(",") if s.strip()]
+
+        playlists.append({
+            "id": r["id"],
+            "name": r["name"],
+            "description": r["description"] or "",
+            "coverUrl": r["cover_url"] or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80",
+            "isPrivate": bool(r["is_private"]),
+            "isCollaborative": bool(r["is_collab"]),
+            "userId": r["user_id"] or "admin",
+            "songIds": song_ids,
+        })
+    return {"playlists": playlists}
+
+
+@app.post("/api/admin/playlists")
+async def create_global_playlist(
+    request: Request,
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(""),
+    cover_file: Optional[UploadFile] = File(None),
+    cover_url: Optional[str] = Form(None),
+    song_ids: Optional[str] = Form("[]"),
+    is_private: Optional[int] = Form(0),
+    is_collab: Optional[int] = Form(0),
+    admin: dict = Depends(require_admin)
+):
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json()
+        name = body.get("name")
+        description = body.get("description", "")
+        cover_url = body.get("coverUrl")
+        song_ids_val = body.get("songIds", [])
+        song_ids = json.dumps(song_ids_val) if isinstance(song_ids_val, list) else str(song_ids_val)
+        is_private = 1 if body.get("isPrivate") else 0
+        is_collab = 1 if body.get("isCollaborative") else 0
+
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Playlist name is required")
+
+    playlist_id = f"playlist-{uuid.uuid4().hex[:8]}"
+
+    final_cover_url = ""
+    if cover_file and cover_file.filename:
+        ext = os.path.splitext(cover_file.filename)[1] or ".jpg"
+        filename = f"{playlist_id}{ext}"
+        filepath = os.path.join(UPLOADS_DIR, "covers", filename)
+        with open(filepath, "wb") as f:
+            shutil.copyfileobj(cover_file.file, f)
+        final_cover_url = f"/uploads/covers/{filename}"
+    elif cover_url and cover_url.strip():
+        final_cover_url = cover_url.strip()
+    else:
+        final_cover_url = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80"
+
+    parsed_song_ids = []
+    if isinstance(song_ids, str):
+        try:
+            parsed_song_ids = json.loads(song_ids)
+        except Exception:
+            parsed_song_ids = [s.strip() for s in song_ids.split(",") if s.strip()]
+    elif isinstance(song_ids, list):
+        parsed_song_ids = song_ids
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO playlists (id, name, description, cover_url, is_private, is_collab, user_id, song_ids)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (playlist_id, name.strip(), description.strip(), final_cover_url, is_private, is_collab, "admin", json.dumps(parsed_song_ids))
+    )
+    conn.commit()
+    conn.close()
+
+    return {
+        "message": "Global playlist created successfully",
+        "playlist": {
+            "id": playlist_id,
+            "name": name.strip(),
+            "description": description.strip(),
+            "coverUrl": final_cover_url,
+            "isPrivate": bool(is_private),
+            "isCollaborative": bool(is_collab),
+            "userId": "admin",
+            "songIds": parsed_song_ids,
+        }
+    }
+
+
+@app.put("/api/admin/playlists/{playlist_id}")
+async def update_global_playlist(
+    playlist_id: str,
+    request: Request,
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    cover_file: Optional[UploadFile] = File(None),
+    cover_url: Optional[str] = Form(None),
+    song_ids: Optional[str] = Form(None),
+    is_private: Optional[int] = Form(None),
+    is_collab: Optional[int] = Form(None),
+    admin: dict = Depends(require_admin)
+):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM playlists WHERE id = ?", (playlist_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    cur_name = existing["name"]
+    cur_desc = existing["description"] or ""
+    cur_cover = existing["cover_url"]
+    cur_private = existing["is_private"]
+    cur_collab = existing["is_collab"]
+    cur_song_ids = existing["song_ids"] or "[]"
+
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json()
+        if "name" in body: cur_name = body["name"]
+        if "description" in body: cur_desc = body["description"]
+        if "coverUrl" in body and body["coverUrl"]: cur_cover = body["coverUrl"]
+        if "isPrivate" in body: cur_private = 1 if body["isPrivate"] else 0
+        if "isCollaborative" in body: cur_collab = 1 if body["isCollaborative"] else 0
+        if "songIds" in body:
+            cur_song_ids = json.dumps(body["songIds"])
+    else:
+        if name and name.strip(): cur_name = name.strip()
+        if description is not None: cur_desc = description.strip()
+        if is_private is not None: cur_private = is_private
+        if is_collab is not None: cur_collab = is_collab
+        if song_ids is not None:
+            try:
+                parsed = json.loads(song_ids)
+                cur_song_ids = json.dumps(parsed)
+            except Exception:
+                cur_song_ids = json.dumps([s.strip() for s in song_ids.split(",") if s.strip()])
+
+        if cover_file and cover_file.filename:
+            ext = os.path.splitext(cover_file.filename)[1] or ".jpg"
+            filename = f"{playlist_id}_{uuid.uuid4().hex[:4]}{ext}"
+            filepath = os.path.join(UPLOADS_DIR, "covers", filename)
+            with open(filepath, "wb") as f:
+                shutil.copyfileobj(cover_file.file, f)
+            cur_cover = f"/uploads/covers/{filename}"
+        elif cover_url and cover_url.strip():
+            cur_cover = cover_url.strip()
+
+    cursor.execute(
+        """UPDATE playlists SET name = ?, description = ?, cover_url = ?, is_private = ?, is_collab = ?, song_ids = ?
+           WHERE id = ?""",
+        (cur_name, cur_desc, cur_cover, cur_private, cur_collab, cur_song_ids, playlist_id)
+    )
+    conn.commit()
+    conn.close()
+
+    try:
+        final_song_ids = json.loads(cur_song_ids)
+    except Exception:
+        final_song_ids = []
+
+    return {
+        "message": "Playlist updated successfully",
+        "playlist": {
+            "id": playlist_id,
+            "name": cur_name,
+            "description": cur_desc,
+            "coverUrl": cur_cover,
+            "isPrivate": bool(cur_private),
+            "isCollaborative": bool(cur_collab),
+            "userId": existing["user_id"] or "admin",
+            "songIds": final_song_ids,
+        }
+    }
+
+
+@app.delete("/api/admin/playlists/{playlist_id}")
+def delete_global_playlist(playlist_id: str, admin: dict = Depends(require_admin)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM playlists WHERE id = ?", (playlist_id,))
+    pl = cursor.fetchone()
+    if not pl:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    if pl["cover_url"] and pl["cover_url"].startswith("/uploads/"):
+        rel_path = pl["cover_url"].replace("/uploads/", "")
+        local_file = os.path.join(UPLOADS_DIR, rel_path)
+        if os.path.exists(local_file):
+            try: os.remove(local_file)
+            except Exception: pass
+
+    cursor.execute("DELETE FROM playlists WHERE id = ?", (playlist_id,))
+    conn.commit()
+    conn.close()
+
+    return {"message": "Global playlist deleted successfully"}
 
 
 # Serve built Frontend SPA Static Files (if dist exists)

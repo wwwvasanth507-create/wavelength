@@ -230,7 +230,7 @@ function AppContent({
             />
           )}
           {view.name === "playlist" && (
-            <PlaylistView playlistId={(view as { id: string }).id} />
+            <PlaylistView playlistId={(view as { id: string }).id} onNavigate={navigate} />
           )}
           {view.name === "admin" && (
             <Admin

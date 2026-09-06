@@ -45,7 +45,14 @@ export default function PremiumHeader({
           <img
             src="/app_icon.png"
             alt="Wavelength"
-            className="h-8 w-8 rounded-xl object-cover border border-white/20 shadow-md"
+            className="h-8 w-8 aspect-square rounded-xl object-cover object-center border border-white/20 shadow-md bg-white/5"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                "data:image/svg+xml;utf8," +
+                encodeURIComponent(
+                  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2318E29A'/><text x='50' y='65' font-size='50' fill='black' font-weight='bold' text-anchor='middle'>W</text></svg>`
+                );
+            }}
           />
         </button>
       </div>

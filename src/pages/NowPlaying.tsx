@@ -129,11 +129,18 @@ export default function NowPlaying({ onClose }: { onClose: () => void }) {
             {/* Artwork & Info */}
             <div className="flex flex-col items-center max-w-md mx-auto w-full space-y-6">
               {/* Picture Container with Heart Like Button on Top Right Corner */}
-              <div className="relative aspect-square w-full rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+              <div className="relative aspect-square w-full rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-white/5">
                 <img
                   src={song.coverUrl}
                   alt={song.title}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full aspect-square object-cover object-center"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      "data:image/svg+xml;utf8," +
+                      encodeURIComponent(
+                        `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                      );
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/30 pointer-events-none" />
 
@@ -369,7 +376,20 @@ function QueuePanel() {
             <div className="text-[10px] uppercase font-black text-[#18E29A] tracking-wider">Now Playing</div>
             <div className="glass-card-premium p-2.5 rounded-xl flex items-center justify-between border border-[#18E29A]/30 bg-[#18E29A]/10">
               <div className="flex items-center gap-3 min-w-0">
-                <img src={p.currentSong.coverUrl} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                <div className="h-10 w-10 aspect-square rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10">
+                  <img
+                    src={p.currentSong.coverUrl}
+                    alt=""
+                    className="h-full w-full aspect-square object-cover object-center"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        "data:image/svg+xml;utf8," +
+                        encodeURIComponent(
+                          `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${p.currentSong?.color ?? "#1ED760"}'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                        );
+                    }}
+                  />
+                </div>
                 <div className="min-w-0">
                   <div className="truncate text-xs font-bold text-[#18E29A] font-heading">{p.currentSong.title}</div>
                   <div className="truncate text-[11px] text-white/60">{p.currentSong.artist}</div>
@@ -396,7 +416,20 @@ function QueuePanel() {
               onClick={() => p.playQueueIndex(p.currentIndex + 1 + i)}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <img src={song.coverUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                <div className="h-9 w-9 aspect-square rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10">
+                  <img
+                    src={song.coverUrl}
+                    alt=""
+                    className="h-full w-full aspect-square object-cover object-center"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        "data:image/svg+xml;utf8," +
+                        encodeURIComponent(
+                          `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                        );
+                    }}
+                  />
+                </div>
                 <div className="min-w-0">
                   <div className="truncate text-xs font-bold text-white font-heading">{song.title}</div>
                   <div className="truncate text-[11px] text-white/50">{song.artist}</div>
@@ -431,7 +464,20 @@ function QueuePanel() {
                 className="glass-card-premium p-2 rounded-xl flex items-center justify-between border border-white/5"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <img src={song.coverUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />
+                  <div className="h-8 w-8 aspect-square rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10">
+                    <img
+                      src={song.coverUrl}
+                      alt=""
+                      className="h-full w-full aspect-square object-cover object-center"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          "data:image/svg+xml;utf8," +
+                          encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${song.color ?? "#1ED760"}'/><text x='50' y='65' font-size='40' fill='white' text-anchor='middle'>♪</text></svg>`
+                          );
+                      }}
+                    />
+                  </div>
                   <div className="min-w-0">
                     <div className="truncate text-xs font-bold text-white font-heading">{song.title}</div>
                     <div className="truncate text-[10px] text-white/50">{song.artist}</div>

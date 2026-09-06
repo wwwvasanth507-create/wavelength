@@ -125,12 +125,24 @@ export function useCatalog(): CatalogState {
   const loadCatalog = useCallback(async () => {
     try {
       // Try local Python Backend API first
-      const res = await fetch("/api/songs", { headers: { Accept: "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        const rawSongs = Array.isArray(data.songs) ? data.songs : [];
+      const [songsRes, playlistsRes] = await Promise.all([
+        fetch("/api/songs", { headers: { Accept: "application/json" } }),
+        fetch("/api/playlists", { headers: { Accept: "application/json" } }).catch(() => null),
+      ]);
+
+      if (songsRes.ok) {
+        const songsData = await songsRes.json();
+        const rawSongs = Array.isArray(songsData.songs) ? songsData.songs : [];
         const songs = rawSongs.map((s: any) => normalizeSong(s));
-        const playlists = fallbackPlaylists;
+
+        let playlists: Playlist[] = fallbackPlaylists;
+        if (playlistsRes && playlistsRes.ok) {
+          const plData = await playlistsRes.json();
+          if (Array.isArray(plData.playlists)) {
+            playlists = plData.playlists;
+          }
+        }
+
         const nextState = {
           songs,
           playlists,
