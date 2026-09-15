@@ -46,6 +46,7 @@ interface PlayerState {
   currentIndex: number;
   currentSong: Song | null;
   isPlaying: boolean;
+  isBuffering: boolean;
   progress: number;
   duration: number;
   elapsed: number;
@@ -202,6 +203,7 @@ export function PlayerProvider({
   const [originalQueue, setOriginalQueue] = useState<Song[]>(() => persistedState.queue);
   const [currentIndex, setCurrentIndex] = useState<number>(() => persistedState.currentIndex);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [progress, setProgressState] = useState(0);
   const [duration, setDurationState] = useState(0);
   const [elapsed, setElapsedState] = useState(0);
@@ -218,6 +220,11 @@ export function PlayerProvider({
   const [sleepTimerSeconds, setSleepTimerSeconds] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const currentLoadedUrlRef = useRef<string | null>(null);
+  const pendingSeekPositionRef = useRef<number | null>(null);
+  const isManualPauseRef = useRef<boolean>(false);
+  const isBufferingRef = useRef<boolean>(false);
+
   const currentSong = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
   const upNext = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue.slice(currentIndex + 1, currentIndex + 50) : [];
 
@@ -231,6 +238,7 @@ export function PlayerProvider({
   const stateRef = useRef({ repeat, queue, currentIndex, shuffle, currentSong, songs, originalQueue });
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { isBufferingRef.current = isBuffering; }, [isBuffering]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { playbackSpeedRef.current = playbackSpeed; }, [playbackSpeed]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
@@ -249,6 +257,36 @@ export function PlayerProvider({
     progressListenersRef.current.forEach((fn) => fn({ elapsed: el, progress: prog, duration: dur }));
   };
 
+  const safePlay = (audioEl: HTMLAudioElement) => {
+    try {
+      AudioEngine.getInstance().attachAudioElement(audioEl);
+      AudioEngine.getInstance().ensureContextActive();
+      const promise = audioEl.play();
+      if (promise !== undefined) {
+        promise
+          .then(() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+          })
+          .catch((err: any) => {
+            // Ignore AbortError - it simply means a new load or seek superseded this request
+            if (err?.name === "AbortError") {
+              return;
+            }
+            if (err?.name === "NotAllowedError") {
+              console.warn("[Player] Autoplay prevented by browser policy - user interaction required.");
+              setIsPlaying(false);
+              return;
+            }
+            console.warn("[Player] Audio playback error:", err);
+            setIsPlaying(false);
+          });
+      }
+    } catch (e) {
+      console.warn("[Player] safePlay exception:", e);
+    }
+  };
+
   // Couple Music Real-Time Room Sync Listener
   useEffect(() => {
     if (!room.isConnected) return;
@@ -259,52 +297,60 @@ export function PlayerProvider({
       isRemoteSyncRef.current = true;
 
       if (payload.action === "CHANGE_SONG" && payload.song) {
-        isUserInitiatedRef.current = true;
+        isUserInitiatedRef.current = !!payload.isPlaying;
         cancelCrossfade();
         const incomingSong = payload.song;
         const incomingQueue = payload.queue && payload.queue.length ? payload.queue : [incomingSong];
         const idx = incomingQueue.findIndex((s) => s.id === incomingSong.id);
         const finalIdx = idx >= 0 ? idx : 0;
 
-        setOriginalQueue(incomingQueue);
-        setQueue(incomingQueue);
-        setCurrentIndex(finalIdx);
-
         const latencySec = Math.max(0, (Date.now() - (payload.timestamp || serverTime)) / 1000);
         const targetPos = Math.max(0, (payload.position || 0) + (payload.isPlaying ? latencySec : 0));
 
-        const a = audioRef.current;
-        if (a) {
-          if (a.src !== incomingSong.audioUrl) {
-            a.src = incomingSong.audioUrl;
-            a.currentTime = targetPos;
-            a.load();
-          } else {
-            a.currentTime = targetPos;
+        pendingSeekPositionRef.current = targetPos;
+
+        // If this song is already active, only adjust position/playstate without re-triggering load()
+        const isSameSong = stateRef.current.currentSong?.id === incomingSong.id && currentLoadedUrlRef.current === incomingSong.audioUrl;
+        if (isSameSong) {
+          const a = audioRef.current;
+          if (a) {
+            if (Math.abs(a.currentTime - targetPos) > 1.5) {
+              a.currentTime = targetPos;
+            }
+            setElapsedState(targetPos);
+            if (payload.isPlaying) {
+              isManualPauseRef.current = false;
+              safePlay(a);
+            } else {
+              isManualPauseRef.current = true;
+              a.pause();
+              setIsPlaying(false);
+            }
           }
-          if (payload.isPlaying) {
-            a.play().then(() => setIsPlaying(true)).catch(() => {});
-          } else {
-            a.pause();
-            setIsPlaying(false);
-          }
+        } else {
+          // Setting queue and currentIndex triggers the unified playback effect cleanly
+          setOriginalQueue(incomingQueue);
+          setQueue(incomingQueue);
+          setCurrentIndex(finalIdx);
         }
-        setElapsedState(targetPos);
+
         addToast(`Partner playing: "${incomingSong.title}"`, "info");
       } else if (payload.action === "PLAY") {
         isUserInitiatedRef.current = true;
+        isManualPauseRef.current = false;
         const a = audioRef.current;
         if (a) {
           const latencySec = Math.max(0, (Date.now() - (payload.timestamp || serverTime)) / 1000);
           const targetPos = Math.max(0, (payload.position || 0) + latencySec);
-          if (Math.abs(a.currentTime - targetPos) > 0.4) {
+          if (Math.abs(a.currentTime - targetPos) > 1.5) {
             a.currentTime = targetPos;
             setElapsedState(targetPos);
           }
-          a.play().then(() => setIsPlaying(true)).catch(() => {});
+          safePlay(a);
         }
         setIsPlaying(true);
       } else if (payload.action === "PAUSE") {
+        isManualPauseRef.current = true;
         const a = audioRef.current;
         if (a) {
           a.pause();
@@ -319,16 +365,46 @@ export function PlayerProvider({
         const a = audioRef.current;
         if (a) {
           a.currentTime = target;
+          setElapsedState(target);
           if (payload.isPlaying !== undefined) {
             if (payload.isPlaying) {
-              a.play().then(() => setIsPlaying(true)).catch(() => {});
+              isManualPauseRef.current = false;
+              safePlay(a);
             } else {
+              isManualPauseRef.current = true;
               a.pause();
               setIsPlaying(false);
             }
           }
         }
-        setElapsedState(target);
+      } else if (payload.action === "DRIFT_SYNC") {
+        // High-precision smooth low-internet sync:
+        // Adjust playback speed by +/-4% to smoothly align positions WITHOUT dropping the audio buffer!
+        const a = audioRef.current;
+        if (a && !a.paused && a.duration && payload.isPlaying) {
+          const latencySec = Math.max(0, (Date.now() - (payload.timestamp || serverTime)) / 1000);
+          const remotePos = Math.max(0, (payload.position || 0) + latencySec);
+          const localPos = a.currentTime;
+          const drift = remotePos - localPos;
+          const baseSpeed = playbackSpeedRef.current;
+
+          if (Math.abs(drift) <= 0.25) {
+            // In sync (within 250ms), maintain normal speed
+            a.playbackRate = baseSpeed;
+          } else if (drift > 0.25 && drift <= 2.5) {
+            // Local is slightly behind: smoothly speed up by 4% to catch up without network buffer drop
+            a.playbackRate = baseSpeed * 1.04;
+          } else if (drift < -0.25 && drift >= -2.5) {
+            // Local is slightly ahead: smoothly slow down by 4%
+            a.playbackRate = baseSpeed * 0.96;
+          } else if (Math.abs(drift) > 2.5) {
+            // Significant drift (> 2.5s) - hard seek only if ready
+            if (a.readyState >= 1) {
+              a.currentTime = remotePos;
+              setElapsedState(remotePos);
+            }
+          }
+        }
       } else if (payload.action === "SPEED" && payload.playbackSpeed) {
         setPlaybackSpeedState(payload.playbackSpeed);
         if (audioRef.current) audioRef.current.playbackRate = payload.playbackSpeed;
@@ -338,25 +414,25 @@ export function PlayerProvider({
 
       setTimeout(() => {
         isRemoteSyncRef.current = false;
-      }, 80);
+      }, 150);
     });
 
     return unsubscribe;
   }, [room.isConnected, room.clientId]);
 
-  // Periodic drift check & sync heartbeat
+  // Periodic smooth drift sync heartbeat (sends DRIFT_SYNC to prevent hard-seek buffer drops)
   useEffect(() => {
     if (!room.isConnected || !isPlaying || !room.roomCode) return;
     const interval = setInterval(() => {
       const a = audioRef.current;
       if (a && !a.paused && a.duration && !isRemoteSyncRef.current) {
         room.sendSyncAction({
-          action: "SEEK",
+          action: "DRIFT_SYNC",
           position: a.currentTime,
           isPlaying: true,
         });
       }
-    }, 6000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [room.isConnected, isPlaying, room.roomCode]);
 
@@ -506,14 +582,38 @@ export function PlayerProvider({
         if (a === audioRef.current) setIsPlaying(true);
       });
 
+      a.addEventListener("playing", () => {
+        if (a === audioRef.current) {
+          setIsPlaying(true);
+          setIsBuffering(false);
+        }
+      });
+
+      a.addEventListener("waiting", () => {
+        if (a === audioRef.current && isPlayingRef.current) {
+          setIsBuffering(true);
+        }
+      });
+
+      a.addEventListener("canplay", () => {
+        if (a === audioRef.current) {
+          setIsBuffering(false);
+        }
+      });
+
       a.addEventListener("pause", () => {
-        if (a === audioRef.current && !crossfadeRef.current?.isCrossfading) setIsPlaying(false);
+        if (a !== audioRef.current || crossfadeRef.current?.isCrossfading) return;
+        // Ignore automatic pause events fired by browser during loading, seeking, or buffering
+        if (!isManualPauseRef.current && (a.seeking || isBufferingRef.current || !currentLoadedUrlRef.current)) {
+          return;
+        }
+        setIsPlaying(false);
       });
     };
 
     if (!audioRef.current) {
       const a = new Audio();
-      a.preload = "metadata";
+      a.preload = "auto";
       (a as any).playsInline = true;
       a.volume = volumeRef.current;
       attachListeners(a);
@@ -563,21 +663,39 @@ export function PlayerProvider({
     cancelCrossfade();
 
     const targetUrl = currentSong.audioUrl;
-    if (a.src !== targetUrl) {
+    const isNewUrl = currentLoadedUrlRef.current !== targetUrl;
+
+    if (isNewUrl) {
+      currentLoadedUrlRef.current = targetUrl;
       a.src = targetUrl;
-      a.currentTime = 0;
-      setElapsedState(0);
+      a.preload = "auto";
+
+      const seekTarget = pendingSeekPositionRef.current !== null ? pendingSeekPositionRef.current : 0;
+      pendingSeekPositionRef.current = null;
+
+      a.currentTime = seekTarget;
+      setElapsedState(seekTarget);
       setProgressState(0);
-      notifyProgress(0, 0, a.duration || 0);
+      notifyProgress(seekTarget, 0, a.duration || 0);
       a.load();
+    } else if (pendingSeekPositionRef.current !== null) {
+      const seekTarget = pendingSeekPositionRef.current;
+      pendingSeekPositionRef.current = null;
+      if (Math.abs(a.currentTime - seekTarget) > 0.5) {
+        a.currentTime = seekTarget;
+        setElapsedState(seekTarget);
+      }
     }
+
     a.playbackRate = playbackSpeed;
 
     // STRICT CHECK: ONLY PLAY IF USER EXPLICITLY INITIATED PLAYBACK
     // NEVER AUTO-PLAY ON DOMAIN REFRESH OR MOBILE REOPEN
     if (isUserInitiatedRef.current) {
-      a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      isManualPauseRef.current = false;
+      safePlay(a);
     } else {
+      isManualPauseRef.current = true;
       a.pause();
       setIsPlaying(false);
     }
@@ -765,20 +883,19 @@ export function PlayerProvider({
         return;
       }
     }
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
+    pendingSeekPositionRef.current = 0;
     setElapsedState(0);
     setProgressState(0);
     notifyProgress(0, 0, audioRef.current?.duration || 0);
 
     isUserInitiatedRef.current = true; // User/queue progression
+    isManualPauseRef.current = false;
     setCurrentIndex(nextIndex);
-    setIsPlaying(true);
   };
 
   const playSong = (song: Song, newQueue?: Song[]) => {
     isUserInitiatedRef.current = true; // User explicitly clicked a song to play!
+    isManualPauseRef.current = false;
     cancelCrossfade();
     const source = newQueue ?? (originalQueue.length ? originalQueue : songs);
     const normalized = source.filter(Boolean);
@@ -792,16 +909,13 @@ export function PlayerProvider({
     const idx = playOrder.findIndex((s) => s.id === song.id);
     const finalIndex = idx >= 0 ? idx : 0;
 
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
+    pendingSeekPositionRef.current = 0;
     setOriginalQueue(normalized);
     setQueue(playOrder);
     setCurrentIndex(finalIndex);
     setElapsedState(0);
     setProgressState(0);
     notifyProgress(0, 0, 0);
-    setIsPlaying(true);
     addToast(`Playing "${song.title}"`, "info");
     if (!isRemoteSyncRef.current && room.isConnected) {
       room.sendSyncAction({
@@ -816,16 +930,14 @@ export function PlayerProvider({
 
   const playQueueIndex = (index: number) => {
     isUserInitiatedRef.current = true; // User explicitly picked queue item
+    isManualPauseRef.current = false;
     cancelCrossfade();
     if (index < 0 || index >= queue.length) return;
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
+    pendingSeekPositionRef.current = 0;
     setElapsedState(0);
     setProgressState(0);
     notifyProgress(0, 0, 0);
     setCurrentIndex(index);
-    setIsPlaying(true);
     if (!isRemoteSyncRef.current && room.isConnected && queue[index]) {
       room.sendSyncAction({
         action: "CHANGE_SONG",
@@ -897,14 +1009,14 @@ export function PlayerProvider({
       return;
     }
     if (a.paused) {
-      a.play().then(() => {
-        setIsPlaying(true);
-        if (!isRemoteSyncRef.current && room.isConnected) {
-          room.sendSyncAction({ action: "PLAY", position: a.currentTime });
-        }
-      }).catch(() => setIsPlaying(false));
+      isManualPauseRef.current = false;
+      safePlay(a);
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "PLAY", position: a.currentTime });
+      }
     } else {
       cancelCrossfade();
+      isManualPauseRef.current = true;
       a.pause();
       setIsPlaying(false);
       if (!isRemoteSyncRef.current && room.isConnected) {
@@ -917,11 +1029,9 @@ export function PlayerProvider({
 
   const prev = () => {
     isUserInitiatedRef.current = true;
+    isManualPauseRef.current = false;
     cancelCrossfade();
-    const a = audioRef.current;
-    if (a) {
-      a.currentTime = 0;
-    }
+    pendingSeekPositionRef.current = 0;
     setElapsedState(0);
     setProgressState(0);
     notifyProgress(0, 0, 0);
@@ -930,7 +1040,6 @@ export function PlayerProvider({
     let prevIndex = currentIndex - 1;
     if (prevIndex < 0) prevIndex = queue.length - 1;
     setCurrentIndex(prevIndex);
-    setIsPlaying(true);
     if (!isRemoteSyncRef.current && room.isConnected && queue[prevIndex]) {
       room.sendSyncAction({
         action: "CHANGE_SONG",
@@ -1132,6 +1241,7 @@ export function PlayerProvider({
         currentIndex,
         currentSong,
         isPlaying,
+        isBuffering,
         progress,
         duration,
         elapsed,

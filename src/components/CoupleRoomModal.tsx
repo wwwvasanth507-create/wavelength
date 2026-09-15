@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRoom } from "../context/RoomContext";
 import { usePlayer } from "../context/PlayerContext";
+import { AudioEngine } from "../services/AudioEngine";
 
 interface CoupleRoomModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export default function CoupleRoomModal({ isOpen, onClose, prefilledCode }: Coup
   const handleCreateRoom = async () => {
     setError(null);
     setLoading(true);
+    AudioEngine.getInstance().ensureContextActive();
     const code = await createRoom(currentSong, isPlaying, elapsed, queue);
     setLoading(false);
     if (code) {
@@ -57,6 +59,7 @@ export default function CoupleRoomModal({ isOpen, onClose, prefilledCode }: Coup
     }
     setError(null);
     setLoading(true);
+    AudioEngine.getInstance().ensureContextActive();
     const res = await joinRoom(inputCode.trim());
     setLoading(false);
     if (res.success) {

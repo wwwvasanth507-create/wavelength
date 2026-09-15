@@ -62,7 +62,7 @@ export interface RoomState {
   queue: Song[];
 }
 
-export type RoomSyncActionType = "PLAY" | "PAUSE" | "SEEK" | "CHANGE_SONG" | "SPEED" | "QUEUE";
+export type RoomSyncActionType = "PLAY" | "PAUSE" | "SEEK" | "CHANGE_SONG" | "SPEED" | "QUEUE" | "DRIFT_SYNC";
 
 export interface RoomSyncPayload {
   action: RoomSyncActionType;

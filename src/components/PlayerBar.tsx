@@ -89,7 +89,9 @@ export default function PlayerBar({
             className="h-9 w-9 rounded-full btn-glow-primary grid place-items-center shrink-0"
             aria-label="Play/Pause"
           >
-            {p.isPlaying ? (
+            {p.isBuffering ? (
+              <div className="h-4 w-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+            ) : p.isPlaying ? (
               <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-black" fill="currentColor">
                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
               </svg>
@@ -216,7 +218,9 @@ export default function PlayerBar({
               aria-label="Play or Pause"
               className="h-11 w-11 rounded-full btn-glow-primary grid place-items-center shrink-0"
             >
-              {p.isPlaying ? (
+              {p.isBuffering ? (
+                <div className="h-5 w-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+              ) : p.isPlaying ? (
                 <svg viewBox="0 0 24 24" className="h-5 w-5 text-black" fill="currentColor">
                   <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                 </svg>

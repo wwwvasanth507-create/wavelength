@@ -54,6 +54,7 @@ export function RoomProvider({ children }: { children: ReactNode }) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const listenersRef = useRef<Set<(payload: RoomSyncPayload, serverTime: number) => void>>(new Set());
+  const isCreatorRef = useRef<boolean>(false);
 
   // Connect WebSocket to /ws/rooms/{code}
   const connectSocket = (code: string) => {
@@ -85,8 +86,12 @@ export function RoomProvider({ children }: { children: ReactNode }) {
         const msg = JSON.parse(event.data);
         if (msg.type === "ROOM_INIT") {
           setMemberCount(msg.memberCount || 1);
-          // Trigger listeners with initial state if available
-          if (msg.state && (msg.state.currentSong || msg.state.isPlaying)) {
+          // If this client just created the room, its playback is already up-to-date
+          const wasCreator = isCreatorRef.current;
+          isCreatorRef.current = false;
+
+          // Trigger listeners with initial state for joining users
+          if (!wasCreator && msg.state && (msg.state.currentSong || msg.state.isPlaying)) {
             const initialPayload: RoomSyncPayload = {
               action: "CHANGE_SONG",
               song: msg.state.currentSong,
@@ -175,6 +180,7 @@ export function RoomProvider({ children }: { children: ReactNode }) {
       if (!res.ok) return null;
       const data = await res.json();
       const code = data.roomCode;
+      isCreatorRef.current = true;
       connectSocket(code);
       return code;
     } catch {
