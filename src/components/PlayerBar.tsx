@@ -1,17 +1,21 @@
 import { useRef, useState } from "react";
 import { usePlayer, usePlayerProgress, formatTime } from "../context/PlayerContext";
+import { useRoom } from "../context/RoomContext";
 import type { AudioQuality, SoundPreset } from "../types";
 
 export default function PlayerBar({
   onOpenNowPlaying,
   onOpenLyrics,
   onOpenQueue,
+  onOpenCoupleModal,
 }: {
   onOpenNowPlaying: () => void;
   onOpenLyrics?: () => void;
   onOpenQueue?: () => void;
+  onOpenCoupleModal?: () => void;
 }) {
   const p = usePlayer();
+  const { isConnected, roomCode } = useRoom();
   const song = p.currentSong;
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
@@ -55,6 +59,17 @@ export default function PlayerBar({
         </button>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {isConnected && roomCode && (
+            <button
+              onClick={onOpenCoupleModal}
+              className="h-7 px-2 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40 text-[10px] font-extrabold flex items-center gap-1 shrink-0 active:scale-95"
+              title={`Room ${roomCode}`}
+            >
+              <span>💖</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#18E29A] animate-pulse" />
+            </button>
+          )}
+
           {/* GREEN SHUFFLE BUTTON */}
           <button
             onClick={p.toggleShuffle}
@@ -151,6 +166,18 @@ export default function PlayerBar({
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
           </button>
+
+          {isConnected && roomCode && (
+            <button
+              onClick={onOpenCoupleModal}
+              className="h-8 px-2.5 rounded-full bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/40 text-[11px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+              title={`Synced with Room ${roomCode}`}
+            >
+              <span>💖</span>
+              <span className="hidden xl:inline">{roomCode}</span>
+              <span className="h-2 w-2 rounded-full bg-[#18E29A] animate-pulse" />
+            </button>
+          )}
         </div>
 
         {/* Center: controls & seekbar */}

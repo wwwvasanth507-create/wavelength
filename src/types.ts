@@ -50,3 +50,34 @@ export interface Toast {
   message: string;
   type?: "info" | "success" | "warning" | "error";
 }
+
+export interface RoomState {
+  code: string;
+  memberCount: number;
+  currentSong: Song | null;
+  isPlaying: boolean;
+  position: number;
+  lastSyncTime: number;
+  playbackSpeed: number;
+  queue: Song[];
+}
+
+export type RoomSyncActionType = "PLAY" | "PAUSE" | "SEEK" | "CHANGE_SONG" | "SPEED" | "QUEUE";
+
+export interface RoomSyncPayload {
+  action: RoomSyncActionType;
+  song?: Song | null;
+  position?: number;
+  isPlaying?: boolean;
+  playbackSpeed?: number;
+  queue?: Song[];
+  senderId?: string;
+  timestamp?: number;
+}
+
+export interface ReactionItem {
+  id: string;
+  emoji: string;
+  senderId?: string;
+  x: number;
+}

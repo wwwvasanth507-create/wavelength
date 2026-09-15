@@ -4,7 +4,9 @@ import PlayerBar from "./components/PlayerBar";
 import PremiumHeader from "./components/PremiumHeader";
 import { PlayerProvider, usePlayer } from "./context/PlayerContext";
 import { AuthProvider } from "./context/AuthContext";
+import { RoomProvider, useRoom } from "./context/RoomContext";
 import AuthModal from "./components/AuthModal";
+import CoupleRoomModal from "./components/CoupleRoomModal";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
 import Library from "./pages/Library";
@@ -89,20 +91,22 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <PlayerProvider songs={catalog.songs}>
-        <AppContent
-          view={view}
-          currentView={currentView}
-          navigate={navigate}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          nowPlaying={nowPlaying}
-          setNowPlaying={setNowPlaying}
-          showCreateModal={showCreateModal}
-          setShowCreateModal={setShowCreateModal}
-          catalog={catalog}
-        />
-      </PlayerProvider>
+      <RoomProvider>
+        <PlayerProvider songs={catalog.songs}>
+          <AppContent
+            view={view}
+            currentView={currentView}
+            navigate={navigate}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            nowPlaying={nowPlaying}
+            setNowPlaying={setNowPlaying}
+            showCreateModal={showCreateModal}
+            setShowCreateModal={setShowCreateModal}
+            catalog={catalog}
+          />
+        </PlayerProvider>
+      </RoomProvider>
     </AuthProvider>
   );
 }
@@ -131,12 +135,31 @@ function AppContent({
   catalog: ReturnType<typeof useCatalog>;
 }) {
   const { toasts, removeToast, createPlaylist, currentSong } = usePlayer();
+  const { reactions } = useRoom();
   const [newPlName, setNewPlName] = useState("");
   const [newPlDesc, setNewPlDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [isCollab, setIsCollab] = useState(false);
   const [showLandscapeWarning, setShowLandscapeWarning] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showCoupleModal, setShowCoupleModal] = useState(false);
+  const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const checkRoomHash = () => {
+      const h = window.location.hash;
+      if (h.includes("room/")) {
+        const code = h.split("room/")[1]?.substring(0, 6);
+        if (code && /^\d{6}$/.test(code)) {
+          setPrefilledRoomCode(code);
+          setShowCoupleModal(true);
+        }
+      }
+    };
+    checkRoomHash();
+    window.addEventListener("hashchange", checkRoomHash);
+    return () => window.removeEventListener("hashchange", checkRoomHash);
+  }, []);
 
   useEffect(() => {
     const checkOrientation = () => {
@@ -183,6 +206,19 @@ function AppContent({
         <div className="ambient-orb-2" />
       </div>
 
+      {/* Floating Emoji Reactions Overlay from Couple Partner */}
+      <div className="fixed inset-0 pointer-events-none z-[120] overflow-hidden">
+        {reactions.map((r) => (
+          <div
+            key={r.id}
+            className="absolute bottom-24 text-4xl sm:text-5xl animate-float-reaction select-none drop-shadow-2xl"
+            style={{ left: `${r.x}%` }}
+          >
+            {r.emoji}
+          </div>
+        ))}
+      </div>
+
       {/* Toast Notification Container */}
       <div className="fixed top-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none">
         {toasts.map((t) => (
@@ -204,6 +240,7 @@ function AppContent({
           currentView={currentView}
           playlistIds={catalog.playlists.map((p) => ({ id: p.id, name: p.name }))}
           onCreatePlaylistModal={() => setShowCreateModal(true)}
+          onOpenCoupleModal={() => setShowCoupleModal(true)}
         />
 
         <main className="flex-1 overflow-y-auto pb-36 lg:pb-32 bg-transparent">
@@ -213,6 +250,7 @@ function AppContent({
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onOpenAuthModal={() => setShowAuthModal(true)}
+            onOpenCoupleModal={() => setShowCoupleModal(true)}
           />
 
           {view.name === "home" && <Home onNavigate={navigate} />}
@@ -247,16 +285,28 @@ function AppContent({
         onOpenNowPlaying={() => setNowPlaying(true)}
         onOpenLyrics={() => setNowPlaying(true)}
         onOpenQueue={() => setNowPlaying(true)}
+        onOpenCoupleModal={() => setShowCoupleModal(true)}
       />
 
       {/* Mobile Bottom Navigation */}
-      <MiniSidebar onNavigate={(n) => navigate(n)} currentView={view.name} />
+      <MiniSidebar
+        onNavigate={(n) => navigate(n)}
+        currentView={view.name}
+        onOpenCoupleModal={() => setShowCoupleModal(true)}
+      />
 
       {/* Expanded Fullscreen Player Modal */}
       {nowPlaying && <NowPlaying onClose={() => setNowPlaying(false)} />}
 
       {/* Auth Modal (Login / Sign Up) */}
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+
+      {/* Couple Music Room Modal */}
+      <CoupleRoomModal
+        isOpen={showCoupleModal}
+        onClose={() => setShowCoupleModal(false)}
+        prefilledCode={prefilledRoomCode}
+      />
 
       {/* Create Playlist Modal */}
       {showCreateModal && (

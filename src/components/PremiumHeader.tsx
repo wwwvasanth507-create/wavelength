@@ -1,16 +1,20 @@
 import { useAuth } from "../context/AuthContext";
+import { useRoom } from "../context/RoomContext";
 
 export default function PremiumHeader({
   onNavigate,
   onOpenAuthModal,
+  onOpenCoupleModal,
 }: {
   onSearchClick?: () => void;
   onNavigate: (view: string) => void;
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
   onOpenAuthModal?: () => void;
+  onOpenCoupleModal?: () => void;
 }) {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { isConnected, roomCode } = useRoom();
 
   return (
     <header className="sticky top-0 z-30 px-4 md:px-8 py-3.5 flex items-center justify-between pointer-events-none">
@@ -59,6 +63,25 @@ export default function PremiumHeader({
 
       {/* Right User / Admin Auth Buttons */}
       <div className="pointer-events-auto flex items-center gap-3">
+        {/* Couple Music Room Button */}
+        <button
+          onClick={onOpenCoupleModal}
+          className={`pointer-events-auto px-3.5 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all ${
+            isConnected && roomCode
+              ? "bg-gradient-to-r from-pink-500/25 to-rose-500/25 text-pink-300 border border-pink-500/40 shadow-pink-500/10"
+              : "bg-white/5 hover:bg-white/10 text-white/80 hover:text-pink-300 border border-white/10"
+          }`}
+          title={isConnected && roomCode ? `Room ${roomCode} active` : "Start Couple Music"}
+        >
+          <span className="text-sm">💖</span>
+          <span className="hidden sm:inline">
+            {isConnected && roomCode ? `Room ${roomCode}` : "Couple Music"}
+          </span>
+          {isConnected && roomCode && (
+            <span className="h-2 w-2 rounded-full bg-[#18E29A] animate-pulse" />
+          )}
+        </button>
+
         {isAuthenticated && user ? (
           <div className="flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/10 rounded-full p-1.5 pl-4 shadow-lg">
             <div className="flex flex-col text-right pr-1">

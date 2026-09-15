@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { AudioQuality, Playlist, Song, SoundPreset, Toast } from "../types";
 import { AudioEngine } from "../services/AudioEngine";
+import { useRoom } from "./RoomContext";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -191,6 +192,10 @@ export function PlayerProvider({
   // Flag to strictly prevent auto-playing audio on page refresh or mobile reopen
   const isUserInitiatedRef = useRef<boolean>(false);
 
+  // Couple Room real-time sync hook
+  const room = useRoom();
+  const isRemoteSyncRef = useRef<boolean>(false);
+
   const persistedState = useMemo(() => readPersistedState(songs), [songs]);
 
   const [queue, setQueue] = useState<Song[]>(() => persistedState.queue);
@@ -243,6 +248,117 @@ export function PlayerProvider({
   const notifyProgress = (el: number, prog: number, dur: number) => {
     progressListenersRef.current.forEach((fn) => fn({ elapsed: el, progress: prog, duration: dur }));
   };
+
+  // Couple Music Real-Time Room Sync Listener
+  useEffect(() => {
+    if (!room.isConnected) return;
+
+    const unsubscribe = room.registerSyncListener((payload, serverTime) => {
+      if (payload.senderId === room.clientId) return;
+
+      isRemoteSyncRef.current = true;
+
+      if (payload.action === "CHANGE_SONG" && payload.song) {
+        isUserInitiatedRef.current = true;
+        cancelCrossfade();
+        const incomingSong = payload.song;
+        const incomingQueue = payload.queue && payload.queue.length ? payload.queue : [incomingSong];
+        const idx = incomingQueue.findIndex((s) => s.id === incomingSong.id);
+        const finalIdx = idx >= 0 ? idx : 0;
+
+        setOriginalQueue(incomingQueue);
+        setQueue(incomingQueue);
+        setCurrentIndex(finalIdx);
+
+        const latencySec = Math.max(0, (Date.now() - (payload.timestamp || serverTime)) / 1000);
+        const targetPos = Math.max(0, (payload.position || 0) + (payload.isPlaying ? latencySec : 0));
+
+        const a = audioRef.current;
+        if (a) {
+          if (a.src !== incomingSong.audioUrl) {
+            a.src = incomingSong.audioUrl;
+            a.currentTime = targetPos;
+            a.load();
+          } else {
+            a.currentTime = targetPos;
+          }
+          if (payload.isPlaying) {
+            a.play().then(() => setIsPlaying(true)).catch(() => {});
+          } else {
+            a.pause();
+            setIsPlaying(false);
+          }
+        }
+        setElapsedState(targetPos);
+        addToast(`Partner playing: "${incomingSong.title}"`, "info");
+      } else if (payload.action === "PLAY") {
+        isUserInitiatedRef.current = true;
+        const a = audioRef.current;
+        if (a) {
+          const latencySec = Math.max(0, (Date.now() - (payload.timestamp || serverTime)) / 1000);
+          const targetPos = Math.max(0, (payload.position || 0) + latencySec);
+          if (Math.abs(a.currentTime - targetPos) > 0.4) {
+            a.currentTime = targetPos;
+            setElapsedState(targetPos);
+          }
+          a.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
+        setIsPlaying(true);
+      } else if (payload.action === "PAUSE") {
+        const a = audioRef.current;
+        if (a) {
+          a.pause();
+          if (typeof payload.position === "number") {
+            a.currentTime = payload.position;
+            setElapsedState(payload.position);
+          }
+        }
+        setIsPlaying(false);
+      } else if (payload.action === "SEEK") {
+        const target = payload.position || 0;
+        const a = audioRef.current;
+        if (a) {
+          a.currentTime = target;
+          if (payload.isPlaying !== undefined) {
+            if (payload.isPlaying) {
+              a.play().then(() => setIsPlaying(true)).catch(() => {});
+            } else {
+              a.pause();
+              setIsPlaying(false);
+            }
+          }
+        }
+        setElapsedState(target);
+      } else if (payload.action === "SPEED" && payload.playbackSpeed) {
+        setPlaybackSpeedState(payload.playbackSpeed);
+        if (audioRef.current) audioRef.current.playbackRate = payload.playbackSpeed;
+      } else if (payload.action === "QUEUE" && payload.queue) {
+        setQueue(payload.queue);
+      }
+
+      setTimeout(() => {
+        isRemoteSyncRef.current = false;
+      }, 80);
+    });
+
+    return unsubscribe;
+  }, [room.isConnected, room.clientId]);
+
+  // Periodic drift check & sync heartbeat
+  useEffect(() => {
+    if (!room.isConnected || !isPlaying || !room.roomCode) return;
+    const interval = setInterval(() => {
+      const a = audioRef.current;
+      if (a && !a.paused && a.duration && !isRemoteSyncRef.current) {
+        room.sendSyncAction({
+          action: "SEEK",
+          position: a.currentTime,
+          isPlaying: true,
+        });
+      }
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [room.isConnected, isPlaying, room.roomCode]);
 
   // Lightweight Screen Wake Lock (only active during intentional user playback)
   const requestWakeLock = async () => {
@@ -687,6 +803,15 @@ export function PlayerProvider({
     notifyProgress(0, 0, 0);
     setIsPlaying(true);
     addToast(`Playing "${song.title}"`, "info");
+    if (!isRemoteSyncRef.current && room.isConnected) {
+      room.sendSyncAction({
+        action: "CHANGE_SONG",
+        song,
+        position: 0,
+        isPlaying: true,
+        queue: playOrder,
+      });
+    }
   };
 
   const playQueueIndex = (index: number) => {
@@ -701,6 +826,15 @@ export function PlayerProvider({
     notifyProgress(0, 0, 0);
     setCurrentIndex(index);
     setIsPlaying(true);
+    if (!isRemoteSyncRef.current && room.isConnected && queue[index]) {
+      room.sendSyncAction({
+        action: "CHANGE_SONG",
+        song: queue[index],
+        position: 0,
+        isPlaying: true,
+        queue,
+      });
+    }
   };
 
   const playNext = (song: Song) => {
@@ -708,19 +842,34 @@ export function PlayerProvider({
       const nextQ = [...prev];
       const insertAt = currentIndex >= 0 ? currentIndex + 1 : 0;
       nextQ.splice(insertAt, 0, song);
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "QUEUE", queue: nextQ });
+      }
       return nextQ;
     });
     addToast(`"${song.title}" added to play next`, "info");
   };
 
   const playLast = (song: Song) => {
-    setQueue((prev) => [...prev, song]);
+    setQueue((prev) => {
+      const nextQ = [...prev, song];
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "QUEUE", queue: nextQ });
+      }
+      return nextQ;
+    });
     addToast(`"${song.title}" added to queue`, "info");
   };
 
   const removeFromQueue = (index: number) => {
     if (index < 0 || index >= queue.length) return;
-    setQueue((prev) => prev.filter((_, i) => i !== index));
+    setQueue((prev) => {
+      const nextQ = prev.filter((_, i) => i !== index);
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "QUEUE", queue: nextQ });
+      }
+      return nextQ;
+    });
     if (index < currentIndex) {
       setCurrentIndex((prev) => prev - 1);
     }
@@ -733,6 +882,9 @@ export function PlayerProvider({
       const copy = [...prev];
       const [moved] = copy.splice(fromIndex, 1);
       copy.splice(toIndex, 0, moved);
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "QUEUE", queue: copy });
+      }
       return copy;
     });
   };
@@ -745,11 +897,19 @@ export function PlayerProvider({
       return;
     }
     if (a.paused) {
-      a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      a.play().then(() => {
+        setIsPlaying(true);
+        if (!isRemoteSyncRef.current && room.isConnected) {
+          room.sendSyncAction({ action: "PLAY", position: a.currentTime });
+        }
+      }).catch(() => setIsPlaying(false));
     } else {
       cancelCrossfade();
       a.pause();
       setIsPlaying(false);
+      if (!isRemoteSyncRef.current && room.isConnected) {
+        room.sendSyncAction({ action: "PAUSE", position: a.currentTime });
+      }
     }
   };
 
@@ -771,6 +931,15 @@ export function PlayerProvider({
     if (prevIndex < 0) prevIndex = queue.length - 1;
     setCurrentIndex(prevIndex);
     setIsPlaying(true);
+    if (!isRemoteSyncRef.current && room.isConnected && queue[prevIndex]) {
+      room.sendSyncAction({
+        action: "CHANGE_SONG",
+        song: queue[prevIndex],
+        position: 0,
+        isPlaying: true,
+        queue,
+      });
+    }
   };
 
   const seek = (ratio: number) => {
@@ -782,6 +951,9 @@ export function PlayerProvider({
     setElapsedState(nextSec);
     setProgressState(ratio);
     notifyProgress(nextSec, ratio, a.duration);
+    if (!isRemoteSyncRef.current && room.isConnected) {
+      room.sendSyncAction({ action: "SEEK", position: nextSec, isPlaying });
+    }
   };
 
   const seekToSeconds = (seconds: number) => {
@@ -793,6 +965,9 @@ export function PlayerProvider({
     setElapsedState(clamped);
     setProgressState(clamped / a.duration);
     notifyProgress(clamped, clamped / a.duration, a.duration);
+    if (!isRemoteSyncRef.current && room.isConnected) {
+      room.sendSyncAction({ action: "SEEK", position: clamped, isPlaying });
+    }
   };
 
   const setVolume = (v: number) => {

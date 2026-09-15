@@ -2,8 +2,11 @@ import os
 import shutil
 import uuid
 import json
-from typing import Optional, List
-from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile, Form, Request
+import random
+import time
+import asyncio
+from typing import Optional, List, Dict, Set
+from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile, Form, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -504,6 +507,216 @@ def delete_global_playlist(playlist_id: str, admin: dict = Depends(require_admin
     conn.close()
 
     return {"message": "Global playlist deleted successfully"}
+
+
+# ==============================================================================
+# Couple Music / Party Room Real-Time Synchronization Manager (In-Memory)
+# Zero database impact - completely isolated and high-speed in-memory state
+# ==============================================================================
+
+class RoomManager:
+    def __init__(self):
+        self.rooms: Dict[str, dict] = {}
+        self.lock = asyncio.Lock()
+
+    def generate_code(self) -> str:
+        for _ in range(100):
+            code = f"{random.randint(100000, 999999)}"
+            if code not in self.rooms:
+                return code
+        return f"{random.randint(100000, 999999)}"
+
+    async def create_room(self, initial_state: dict = None) -> str:
+        async with self.lock:
+            code = self.generate_code()
+            self.rooms[code] = {
+                "code": code,
+                "created_at": time.time(),
+                "clients": set(),
+                "state": {
+                    "currentSong": initial_state.get("currentSong") if initial_state else None,
+                    "isPlaying": initial_state.get("isPlaying", False) if initial_state else False,
+                    "position": initial_state.get("position", 0.0) if initial_state else 0.0,
+                    "lastSyncTime": time.time() * 1000,
+                    "playbackSpeed": initial_state.get("playbackSpeed", 1.0) if initial_state else 1.0,
+                    "queue": initial_state.get("queue", []) if initial_state else [],
+                }
+            }
+            return code
+
+    async def get_room(self, code: str) -> Optional[dict]:
+        async with self.lock:
+            room = self.rooms.get(code)
+            if not room:
+                return None
+            return {
+                "code": room["code"],
+                "memberCount": len(room["clients"]),
+                "state": room["state"],
+                "serverTime": time.time() * 1000
+            }
+
+    async def connect(self, code: str, websocket: WebSocket):
+        await websocket.accept()
+        async with self.lock:
+            if code not in self.rooms:
+                self.rooms[code] = {
+                    "code": code,
+                    "created_at": time.time(),
+                    "clients": set(),
+                    "state": {
+                        "currentSong": None,
+                        "isPlaying": False,
+                        "position": 0.0,
+                        "lastSyncTime": time.time() * 1000,
+                        "playbackSpeed": 1.0,
+                        "queue": [],
+                    }
+                }
+            room = self.rooms[code]
+            room["clients"].add(websocket)
+            member_count = len(room["clients"])
+
+        # Send initial room state to newly connected client
+        await websocket.send_json({
+            "type": "ROOM_INIT",
+            "roomCode": code,
+            "memberCount": member_count,
+            "state": room["state"],
+            "serverTime": time.time() * 1000
+        })
+
+        # Broadcast to other members that a partner joined
+        await self.broadcast(code, {
+            "type": "MEMBER_JOINED",
+            "memberCount": member_count,
+            "serverTime": time.time() * 1000
+        }, exclude=websocket)
+
+    async def disconnect(self, code: str, websocket: WebSocket):
+        remaining = 0
+        async with self.lock:
+            if code in self.rooms:
+                self.rooms[code]["clients"].discard(websocket)
+                remaining = len(self.rooms[code]["clients"])
+        await self.broadcast(code, {
+            "type": "MEMBER_LEFT",
+            "memberCount": remaining,
+            "serverTime": time.time() * 1000
+        })
+
+    async def broadcast(self, code: str, message: dict, exclude: WebSocket = None):
+        room = self.rooms.get(code)
+        if not room:
+            return
+        dead_clients = []
+        for client in list(room["clients"]):
+            if client != exclude:
+                try:
+                    await client.send_json(message)
+                except Exception:
+                    dead_clients.append(client)
+        if dead_clients:
+            async with self.lock:
+                for d in dead_clients:
+                    room["clients"].discard(d)
+
+    async def update_state(self, code: str, action: str, data: dict, sender_socket: WebSocket = None):
+        room = self.rooms.get(code)
+        if not room:
+            return
+        state = room["state"]
+        now_ms = time.time() * 1000
+
+        if action == "CHANGE_SONG":
+            state["currentSong"] = data.get("song")
+            state["position"] = data.get("position", 0.0)
+            state["isPlaying"] = data.get("isPlaying", True)
+            state["lastSyncTime"] = now_ms
+            if "queue" in data and isinstance(data["queue"], list):
+                state["queue"] = data["queue"]
+        elif action == "PLAY":
+            state["isPlaying"] = True
+            if "position" in data:
+                state["position"] = data["position"]
+            state["lastSyncTime"] = now_ms
+        elif action == "PAUSE":
+            state["isPlaying"] = False
+            if "position" in data:
+                state["position"] = data["position"]
+            state["lastSyncTime"] = now_ms
+        elif action == "SEEK":
+            state["position"] = data.get("position", 0.0)
+            state["lastSyncTime"] = now_ms
+            if "isPlaying" in data:
+                state["isPlaying"] = data["isPlaying"]
+        elif action == "SPEED":
+            state["playbackSpeed"] = data.get("playbackSpeed", 1.0)
+        elif action == "QUEUE":
+            state["queue"] = data.get("queue", [])
+
+        # Broadcast sync action to other clients in the room
+        await self.broadcast(code, {
+            "type": "SYNC_ACTION",
+            "action": action,
+            "data": data,
+            "roomCode": code,
+            "serverTime": now_ms,
+            "senderId": data.get("senderId")
+        }, exclude=sender_socket)
+
+room_manager = RoomManager()
+
+
+class RoomCreateRequest(BaseModel):
+    currentSong: Optional[dict] = None
+    isPlaying: Optional[bool] = False
+    position: Optional[float] = 0.0
+    queue: Optional[list] = []
+
+
+@app.post("/api/rooms/create")
+async def create_room_endpoint(req: Optional[RoomCreateRequest] = None):
+    initial = req.dict() if req else {}
+    code = await room_manager.create_room(initial)
+    return {"roomCode": code, "message": "Couple room created successfully"}
+
+
+@app.get("/api/rooms/{code}")
+async def get_room_endpoint(code: str):
+    room = await room_manager.get_room(code)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found or expired")
+    return room
+
+
+@app.websocket("/ws/rooms/{code}")
+async def room_websocket_endpoint(websocket: WebSocket, code: str):
+    await room_manager.connect(code, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "SYNC_ACTION":
+                action = data.get("action")
+                payload = data.get("data", {})
+                await room_manager.update_state(code, action, payload, sender_socket=websocket)
+            elif msg_type == "REACTION":
+                await room_manager.broadcast(code, {
+                    "type": "REACTION",
+                    "emoji": data.get("emoji", "💖"),
+                    "senderId": data.get("senderId"),
+                    "serverTime": time.time() * 1000
+                }, exclude=websocket)
+            elif msg_type == "HEARTBEAT":
+                room = room_manager.rooms.get(code)
+                if room and data.get("isPlaying"):
+                    room["state"]["position"] = data.get("position", room["state"]["position"])
+                    room["state"]["lastSyncTime"] = time.time() * 1000
+    except WebSocketDisconnect:
+        await room_manager.disconnect(code, websocket)
+    except Exception:
+        await room_manager.disconnect(code, websocket)
 
 
 # Serve built Frontend SPA Static Files (if dist exists)
